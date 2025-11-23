@@ -21,11 +21,11 @@ All screenshots are taken from my actual Niri session with this config:
 
 | Overview & workspaces | Sidebars & widgets |
 |:---|:---|
-| <img src="./preview1.png" alt="Overview and workspaces on Niri" /> | <img src="./preview2.png" alt="Sidebars, volume, media and widgets" /> |
+| <img width="1920" height="1080" src="https://github.com/user-attachments/assets/9faaad0e-a665-4747-9428-ea94756e1f0f" alt="Overview and workspaces on Niri" /> | <img width="1918" height="1080" src="https://github.com/user-attachments/assets/21e43f3e-d6d9-4625-8210-642f9c05509b" alt="Sidebars, volume, media and widgets" /> |
 
 | Settings & theming |   |
 |:---|:---|
-| <img src="./preview3.png" alt="Settings window, global search and theming" /> |   |
+| <img width="1912" height="1080" src="https://github.com/user-attachments/assets/25700a1c-70e6-4456-b053-35cf83fcac7a" alt="Settings window, global search and theming" /> |   |
 
 ---
 
