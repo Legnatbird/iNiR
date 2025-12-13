@@ -71,36 +71,16 @@ ShellRoot {
         }
     }
 
-    // IPC for settings
-    // Track if settings is already open to prevent duplicates
-    property bool _settingsOpen: false
-    
+    // IPC for settings - open as separate window using execDetached
     IpcHandler {
         target: "settings"
         function open(): void {
-            if (root._settingsOpen) return
-            root._settingsOpen = true
-            
             // Use waffle settings if enabled and panel family is waffle
-            if (Config.options?.panelFamily === "waffle" && Config.options?.waffles?.settings?.useMaterialStyle !== true) {
-                waffleSettingsProcess.running = true
-            } else {
-                settingsProcess.running = true
-            }
-        }
-    }
-    Process {
-        id: settingsProcess
-        command: ["qs", "-n", "-p", Quickshell.shellPath("settings.qml")]
-        onRunningChanged: {
-            if (!running) root._settingsOpen = false
-        }
-    }
-    Process {
-        id: waffleSettingsProcess
-        command: ["qs", "-n", "-p", Quickshell.shellPath("waffleSettings.qml")]
-        onRunningChanged: {
-            if (!running) root._settingsOpen = false
+            const settingsPath = (Config.options?.panelFamily === "waffle" && Config.options?.waffles?.settings?.useMaterialStyle !== true)
+                ? Quickshell.shellPath("waffleSettings.qml")
+                : Quickshell.shellPath("settings.qml")
+            // -n = no daemon (standalone window), -p = path to QML file
+            Quickshell.execDetached(["qs", "-n", "-p", settingsPath])
         }
     }
 
