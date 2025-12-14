@@ -17,7 +17,31 @@ git pull
 ./setup update
 ```
 
-Updates QML code only. Your configs stay untouched. If there are new optional features (migrations), you'll be asked if you want to apply them.
+Updates QML code, restarts the shell, and offers pending migrations.
+
+## Doctor
+
+```bash
+./setup doctor
+```
+
+Diagnoses and **automatically fixes** common issues:
+- Missing directories
+- Script permissions
+- Python packages (via uv)
+- Version tracking
+- File manifest
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `./setup` | Interactive menu |
+| `./setup install` | Full installation |
+| `./setup update` | Update + restart shell |
+| `./setup doctor` | Diagnose and fix |
+
+Options: `-y` (skip prompts), `-q` (quiet), `-h` (help)
 
 ## What Gets Installed
 
@@ -28,37 +52,16 @@ Updates QML code only. Your configs stay untouched. If there are new optional fe
 | ii config | `~/.config/illogical-impulse/config.json` |
 | GTK/Qt themes | `~/.config/gtk-*/`, `~/.config/kdeglobals` |
 
-On first install, existing configs are backed up as `.old`. On updates, new defaults go to `.new` files - your configs are never overwritten.
-
-## Commands
-
-```bash
-./setup              # Interactive menu
-./setup install      # Full install
-./setup update       # Sync QML code
-./setup status       # Show versions and pending migrations
-./setup migrate      # Apply optional config migrations
-./setup restore      # Restore from backup
-./setup changelog    # Show recent changes
-```
+On first install, existing configs are backed up. On updates, your configs are never touched - only QML code is synced.
 
 ## Migrations
 
-Some features need config changes (new keybinds, layer rules, etc). These are optional and handled separately:
-
-- After `update`, you're asked if you want to apply pending migrations
-- Each migration shows exactly what will change
-- Automatic backup before any change
-- Skip if you prefer to manage configs manually
+Some features need config changes (new keybinds, layer rules, etc). After `update`, you're asked if you want to apply pending migrations. Each shows exactly what will change, with automatic backup.
 
 ## Backups
 
-Backups are created automatically before config changes:
-```
-~/.config/illogical-impulse/backups/<timestamp>/
-```
-
-Restore with `./setup restore <timestamp>`.
+- Install backups: `~/ii-niri-backup/`
+- Update backups: `~/.local/state/quickshell/backups/`
 
 ## Uninstall
 

@@ -1,304 +1,250 @@
 # Doctor command for ii-niri
-# Diagnoses and fixes common issues
+# Diagnoses AND FIXES common issues
 # This script is meant to be sourced.
 
 # shellcheck shell=bash
 
-#####################################################################################
-# Doctor Checks
-#####################################################################################
-
-doctor_check_passed=0
-doctor_check_failed=0
-doctor_check_warned=0
+doctor_passed=0
+doctor_failed=0
+doctor_fixed=0
 
 doctor_pass() {
     echo -e "${STY_GREEN}✓${STY_RST} $1"
-    ((doctor_check_passed++)) || true
+    ((doctor_passed++)) || true
 }
 
 doctor_fail() {
     echo -e "${STY_RED}✗${STY_RST} $1"
-    ((doctor_check_failed++)) || true
+    ((doctor_failed++)) || true
 }
 
-doctor_warn() {
-    echo -e "${STY_YELLOW}!${STY_RST} $1"
-    ((doctor_check_warned++)) || true
+doctor_fix() {
+    echo -e "${STY_YELLOW}⚡${STY_RST} $1"
+    ((doctor_fixed++)) || true
 }
 
-doctor_info() {
-    echo -e "${STY_BLUE}ℹ${STY_RST} $1"
-}
+###############################################################################
+# Checks
+###############################################################################
 
-#####################################################################################
-# Individual Checks
-#####################################################################################
+check_dependencies() {
+    local missing=()
+    local cmds=("qs:quickshell-git" "niri:niri" "nmcli:networkmanager" "wpctl:wireplumber" "jq:jq" "matugen:matugen-bin")
+    
+    for item in "${cmds[@]}"; do
+        local cmd="${item%%:*}"
+        local pkg="${item##*:}"
+        command -v "$cmd" &>/dev/null || missing+=("$pkg")
+    done
+    
+    if [[ ${#missing[@]} -eq 0 ]]; then
+        doctor_pass "All required commands available"
+    else
+        doctor_fail "Missing: ${missing[*]}"
+        echo -e "    ${STY_FAINT}Run: yay -S ${missing[*]}${STY_RST}"
+    fi
+}
 
 check_critical_files() {
     local target="${XDG_CONFIG_HOME}/quickshell/ii"
-    local critical=(
-        "shell.qml"
-        "GlobalStates.qml"
-        "modules/common/Config.qml"
-        "modules/common/Appearance.qml"
-        "modules/common/Directories.qml"
-        "services/NiriService.qml"
-        "services/Audio.qml"
-        "services/Network.qml"
-    )
-    
+    local critical=("shell.qml" "GlobalStates.qml" "modules/common/Config.qml" "services/NiriService.qml")
     local missing=0
+    
     for file in "${critical[@]}"; do
-        if [[ ! -f "$target/$file" ]]; then
-            doctor_fail "Missing critical file: $file"
-            ((missing++)) || true
-        fi
+        [[ ! -f "$target/$file" ]] && { doctor_fail "Missing: $file"; ((missing++)) || true; }
     done
     
-    if [[ $missing -eq 0 ]]; then
-        doctor_pass "All critical files present"
-    fi
-    
-    return $missing
+    [[ $missing -eq 0 ]] && doctor_pass "Critical files present"
 }
 
 check_script_permissions() {
     local target="${XDG_CONFIG_HOME}/quickshell/ii/scripts"
-    local fixed=0
+    [[ ! -d "$target" ]] && return 0
     
-    if [[ ! -d "$target" ]]; then
-        doctor_warn "Scripts directory not found"
-        return 0
-    fi
+    local bad=$(find "$target" \( -name "*.sh" -o -name "*.fish" -o -name "*.py" \) ! -executable 2>/dev/null | wc -l)
     
-    while IFS= read -r -d '' script; do
-        if [[ ! -x "$script" ]]; then
-            chmod +x "$script"
-            ((fixed++)) || true
-        fi
-    done < <(find "$target" \( -name "*.sh" -o -name "*.fish" -o -name "*.py" \) -print0 2>/dev/null)
-    
-    if [[ $fixed -gt 0 ]]; then
-        doctor_warn "Fixed permissions on $fixed script(s)"
+    if [[ $bad -gt 0 ]]; then
+        find "$target" \( -name "*.sh" -o -name "*.fish" -o -name "*.py" \) -exec chmod +x {} \;
+        doctor_fix "Fixed permissions on $bad script(s)"
     else
         doctor_pass "Script permissions OK"
     fi
-    
-    return 0
 }
 
 check_user_config() {
-    local config_file="${XDG_CONFIG_HOME}/illogical-impulse/config.json"
+    local config="${XDG_CONFIG_HOME}/illogical-impulse/config.json"
     
-    if [[ ! -f "$config_file" ]]; then
-        doctor_warn "User config not found (will use defaults)"
+    if [[ ! -f "$config" ]]; then
+        doctor_pass "User config (using defaults)"
         return 0
     fi
     
-    # Validate JSON
-    if command -v jq &>/dev/null; then
-        if ! jq empty "$config_file" 2>/dev/null; then
-            doctor_fail "User config is invalid JSON: $config_file"
-            return 1
-        fi
-        doctor_pass "User config is valid JSON"
+    if command -v jq &>/dev/null && ! jq empty "$config" 2>/dev/null; then
+        doctor_fail "Invalid JSON: $config"
+        echo -e "    ${STY_FAINT}Backup and delete to reset${STY_RST}"
     else
-        doctor_warn "jq not installed, cannot validate config JSON"
+        doctor_pass "User config valid"
     fi
-    
-    return 0
-}
-
-check_orphan_files() {
-    local target="${XDG_CONFIG_HOME}/quickshell/ii"
-    local manifest="$target/.ii-manifest"
-    
-    if [[ ! -f "$manifest" ]]; then
-        doctor_warn "No manifest file (run update to create)"
-        return 0
-    fi
-    
-    local orphans
-    orphans=$(get_orphan_files "$target" "$manifest" 2>/dev/null | wc -l)
-    
-    if [[ $orphans -gt 0 ]]; then
-        doctor_warn "$orphans orphan file(s) found (run update to clean)"
-    else
-        doctor_pass "No orphan files"
-    fi
-    
-    return 0
-}
-
-check_dependencies() {
-    local required_cmds=(
-        "qs:quickshell"
-        "niri:niri"
-        "nmcli:NetworkManager"
-        "wpctl:wireplumber"
-        "jq:jq"
-    )
-    
-    local missing=0
-    for item in "${required_cmds[@]}"; do
-        local cmd="${item%%:*}"
-        local pkg="${item##*:}"
-        
-        if ! command -v "$cmd" &>/dev/null; then
-            doctor_fail "Missing command: $cmd (install $pkg)"
-            ((missing++))
-        fi
-    done
-    
-    if [[ $missing -eq 0 ]]; then
-        doctor_pass "All required commands available"
-    fi
-    
-    return $missing
-}
-
-check_quickshell_loads() {
-    doctor_info "Testing quickshell startup..."
-    
-    # Kill existing (suppress output)
-    qs kill -c ii &>/dev/null || true
-    sleep 0.3
-    
-    # Try to start with short timeout
-    local output
-    output=$(timeout 5 qs -c ii 2>&1) || true
-    
-    # Check for fatal errors (ignore common warnings)
-    if echo "$output" | grep -E "^[[:space:]]*(ERROR|error:)" | grep -vE "(polkit|bluez|Hyprland)" | head -1 | grep -q .; then
-        doctor_fail "Quickshell has errors on startup"
-        echo "$output" | grep -E "(ERROR|error:)" | grep -vE "(polkit|bluez|Hyprland)" | head -3 | while read -r line; do
-            echo "    $line"
-        done
-        return 1
-    fi
-    
-    # If we got here without fatal errors, it's working
-    doctor_pass "Quickshell loads successfully"
-    return 0
-}
-
-check_niri_running() {
-    if [[ -n "$NIRI_SOCKET" ]] && [[ -S "$NIRI_SOCKET" ]]; then
-        doctor_pass "Niri compositor running"
-        return 0
-    fi
-    
-    doctor_warn "Niri not detected (some features won't work)"
-    return 0
 }
 
 check_state_directories() {
-    local dirs=(
-        "${XDG_STATE_HOME}/quickshell/user"
-        "${XDG_CACHE_HOME}/quickshell"
-        "${XDG_CONFIG_HOME}/illogical-impulse"
-    )
-    
+    local dirs=("${XDG_STATE_HOME}/quickshell/user" "${XDG_CACHE_HOME}/quickshell" "${XDG_CONFIG_HOME}/illogical-impulse")
     local created=0
+    
     for dir in "${dirs[@]}"; do
-        if [[ ! -d "$dir" ]]; then
-            mkdir -p "$dir"
-            ((created++)) || true
-        fi
+        [[ ! -d "$dir" ]] && { mkdir -p "$dir"; ((created++)) || true; }
     done
     
-    if [[ $created -gt 0 ]]; then
-        doctor_warn "Created $created missing directory(ies)"
-    else
-        doctor_pass "State directories exist"
-    fi
-    
-    return 0
+    [[ $created -gt 0 ]] && doctor_fix "Created $created directory(ies)" || doctor_pass "State directories exist"
 }
 
 check_python_packages() {
-    local req_file="${XDG_CONFIG_HOME}/quickshell/ii/requirements.txt"
+    local venv="${XDG_STATE_HOME}/quickshell/.venv"
+    local req="${XDG_CONFIG_HOME}/quickshell/ii/requirements.txt"
     
-    if [[ ! -f "$req_file" ]]; then
-        doctor_warn "requirements.txt not found"
-        return 0
-    fi
-    
-    if ! command -v pip &>/dev/null && ! command -v pip3 &>/dev/null; then
-        doctor_warn "pip not installed, cannot check Python packages"
-        return 0
-    fi
-    
-    local pip_cmd="pip3"
-    command -v pip3 &>/dev/null || pip_cmd="pip"
-    
-    local missing=0
-    while IFS= read -r pkg || [[ -n "$pkg" ]]; do
-        # Skip comments and empty lines
-        [[ "$pkg" =~ ^#.*$ || -z "$pkg" ]] && continue
-        
-        # Extract package name (before any version specifier)
-        local pkg_name="${pkg%%[<>=]*}"
-        
-        if ! $pip_cmd show "$pkg_name" &>/dev/null; then
-            ((missing++)) || true
+    # Check if venv exists
+    if [[ ! -d "$venv" ]]; then
+        if command -v uv &>/dev/null; then
+            uv venv "$venv" -p 3.12 2>/dev/null || uv venv "$venv" 2>/dev/null
+            doctor_fix "Created Python venv"
+        else
+            doctor_fail "Python venv missing (install uv)"
+            return
         fi
-    done < "$req_file"
-    
-    if [[ $missing -gt 0 ]]; then
-        doctor_warn "$missing Python package(s) missing (run: pip install -r requirements.txt)"
-    else
-        doctor_pass "Python packages installed"
     fi
     
-    return 0
+    [[ ! -f "$req" ]] && { doctor_pass "Python (no requirements.txt)"; return; }
+    
+    # Use uv to check packages
+    if command -v uv &>/dev/null; then
+        local installed
+        installed=$(VIRTUAL_ENV="$venv" uv pip list 2>/dev/null | tail -n +3 | awk '{print $1}' | tr '[:upper:]' '[:lower:]')
+        local missing=0
+        
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+            local pkg="${line%%[<>=]*}"
+            pkg=$(echo "$pkg" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+            echo "$installed" | grep -q "^${pkg}$" || ((missing++)) || true
+        done < "$req"
+        
+        if [[ $missing -gt 0 ]]; then
+            VIRTUAL_ENV="$venv" uv pip install -r "$req" 2>/dev/null
+            doctor_fix "Installed $missing Python package(s)"
+        else
+            doctor_pass "Python packages OK"
+        fi
+    else
+        doctor_fail "uv not installed, cannot check Python packages"
+    fi
 }
 
-#####################################################################################
-# Main Doctor Function
-#####################################################################################
+check_niri_running() {
+    if [[ -n "$NIRI_SOCKET" && -S "$NIRI_SOCKET" ]]; then
+        doctor_pass "Niri compositor running"
+    else
+        doctor_fail "Niri not detected (run inside Niri session)"
+    fi
+}
 
-run_doctor() {
-    local fix_mode="${1:-false}"
+check_version_tracking() {
+    local version_file="${XDG_CONFIG_HOME}/illogical-impulse/version.json"
+    local installed_marker="${XDG_CONFIG_HOME}/illogical-impulse/installed_true"
     
+    if [[ -f "$installed_marker" && ! -f "$version_file" ]]; then
+        # Existing install without tracking - create it
+        local repo_ver=$(get_repo_version 2>/dev/null || echo "unknown")
+        local repo_commit=$(get_repo_commit 2>/dev/null || echo "unknown")
+        set_installed_version "$repo_ver" "$repo_commit" "doctor"
+        doctor_fix "Created version tracking"
+    else
+        doctor_pass "Version tracking OK"
+    fi
+}
+
+check_manifest() {
+    local manifest="${XDG_CONFIG_HOME}/quickshell/ii/.ii-manifest"
+    local installed_marker="${XDG_CONFIG_HOME}/illogical-impulse/installed_true"
+    
+    if [[ -f "$installed_marker" && ! -f "$manifest" ]]; then
+        # Generate manifest from current state
+        local target="${XDG_CONFIG_HOME}/quickshell/ii"
+        if [[ -d "$target" ]]; then
+            generate_manifest "$target" "$manifest" 2>/dev/null || true
+            doctor_fix "Created file manifest"
+        fi
+    else
+        doctor_pass "File manifest OK"
+    fi
+}
+
+check_quickshell_loads() {
+    echo -e "${STY_FAINT}Testing quickshell startup...${STY_RST}"
+    
+    qs kill -c ii &>/dev/null || true
+    sleep 0.5
+    
+    local output
+    output=$(timeout 5 qs -c ii 2>&1) || true
+    
+    if echo "$output" | grep -q "Configuration Loaded"; then
+        doctor_pass "Quickshell loads OK"
+        return 0
+    fi
+    
+    local errors
+    errors=$(echo "$output" | grep -E "^[[:space:]]*(ERROR|error:)" | grep -vE "(polkit|bluez|Hyprland)" | head -1)
+    
+    if [[ -n "$errors" ]]; then
+        doctor_fail "Quickshell has errors"
+        echo -e "    ${STY_FAINT}$errors${STY_RST}"
+        return 1
+    fi
+    
+    doctor_pass "Quickshell loads OK"
+}
+
+###############################################################################
+# Main
+###############################################################################
+
+run_doctor_with_fixes() {
     echo ""
     echo -e "${STY_CYAN}${STY_BOLD}ii-niri Doctor${STY_RST}"
-    echo -e "${STY_FAINT}Checking your installation...${STY_RST}"
     echo ""
     
-    # Reset counters
-    doctor_check_passed=0
-    doctor_check_failed=0
-    doctor_check_warned=0
+    doctor_passed=0
+    doctor_failed=0
+    doctor_fixed=0
     
-    # Run all checks
     check_dependencies
     check_critical_files
     check_script_permissions
     check_user_config
     check_state_directories
-    check_orphan_files
+    check_version_tracking
+    check_manifest
     check_niri_running
     check_python_packages
     check_quickshell_loads
     
-    # Summary
     echo ""
-    echo -e "${STY_BOLD}Summary:${STY_RST}"
-    echo -e "  ${STY_GREEN}Passed:${STY_RST}  $doctor_check_passed"
-    echo -e "  ${STY_YELLOW}Warnings:${STY_RST} $doctor_check_warned"
-    echo -e "  ${STY_RED}Failed:${STY_RST}   $doctor_check_failed"
-    echo ""
+    echo -e "${STY_BOLD}Summary:${STY_RST} ${STY_GREEN}$doctor_passed passed${STY_RST}, ${STY_YELLOW}$doctor_fixed fixed${STY_RST}, ${STY_RED}$doctor_failed failed${STY_RST}"
     
-    if [[ $doctor_check_failed -gt 0 ]]; then
-        echo -e "${STY_RED}Some checks failed. Run ${STY_CYAN}./setup install${STY_RED} to fix.${STY_RST}"
+    if [[ $doctor_failed -gt 0 ]]; then
+        echo ""
+        echo -e "${STY_RED}Some issues need manual attention.${STY_RST}"
         return 1
-    elif [[ $doctor_check_warned -gt 0 ]]; then
-        echo -e "${STY_YELLOW}Some warnings. Run ${STY_CYAN}./setup update${STY_YELLOW} to fix most issues.${STY_RST}"
-        return 0
+    elif [[ $doctor_fixed -gt 0 ]]; then
+        echo ""
+        echo -e "${STY_GREEN}All issues fixed automatically.${STY_RST}"
     else
-        echo -e "${STY_GREEN}${STY_BOLD}All checks passed! ✓${STY_RST}"
-        return 0
+        echo ""
+        echo -e "${STY_GREEN}Everything looks good!${STY_RST}"
     fi
+}
+
+# Legacy function name for compatibility
+run_doctor() {
+    run_doctor_with_fixes
 }

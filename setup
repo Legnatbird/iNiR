@@ -1,21 +1,16 @@
 #!/usr/bin/env bash
-# ============================================================================
-# ii-niri setup script
-# illogical-impulse on Niri - Installation and management
-# ============================================================================
+# ii-niri setup - Simplified installer
+# Commands: install, update, doctor (or TUI if no args)
 
-if [[ -z "${BASH_VERSION:-}" ]]; then
-  exec /usr/bin/env bash "$0" "$@"
-fi
-
+set -e
 cd "$(dirname "$0")"
 REPO_ROOT="$(pwd)"
 
+# Load core libraries
 source ./sdata/lib/environment-variables.sh
 source ./sdata/lib/functions.sh
 source ./sdata/lib/package-installers.sh
 source ./sdata/lib/dist-determine.sh
-source ./sdata/lib/tui.sh
 source ./sdata/lib/conflicts.sh
 source ./sdata/lib/migrations.sh
 source ./sdata/lib/versioning.sh
@@ -23,355 +18,257 @@ source ./sdata/lib/robust-update.sh
 source ./sdata/lib/doctor.sh
 
 prevent_sudo_or_root
-set -e
 
-# Cleanup trap
-cleanup() {
-  if [[ -d "/tmp/buildyay" ]]; then rm -rf /tmp/buildyay; fi
-  if [[ -d "/tmp/buildparu" ]]; then rm -rf /tmp/buildparu; fi
-}
-trap cleanup EXIT INT TERM
+trap 'rm -rf /tmp/buildyay /tmp/buildparu 2>/dev/null' EXIT INT TERM
 
-#####################################################################################
+# Defaults
+ask=true
+quiet=false
+
+###############################################################################
 # Help
-#####################################################################################
-showhelp_global(){
-printf "${STY_CYAN}illogical-impulse on Niri${STY_RST}
+###############################################################################
+show_help() {
+    cat << 'EOF'
+ii-niri setup
 
-Syntax:
-  $0 <subcommand> [OPTIONS]...
+Usage: ./setup [command] [options]
 
-Subcommands:
-  install        Install ii-niri (dependencies + configs)
-  update         Update ii-niri (QML code only, respects your configs)
-  doctor         Diagnose and fix common issues
-  migrate        Apply optional config migrations (interactive)
-  status         Show installation status and pending migrations
-  changelog      Show recent changes and release notes
-  restore        Restore configs from backup
-  
-  install-deps   Install only dependencies
-  install-setups Run only system setup (groups, services)
-  install-files  Copy only config files (legacy, use 'update' instead)
+Commands:
+  (none)     Interactive menu
+  install    Full installation (deps + config + files)
+  update     Update QML code and restart shell
+  doctor     Diagnose and fix problems
 
-  help           Show this help message
+Options:
+  -y, --yes     Skip prompts (auto-yes)
+  -q, --quiet   Minimal output
+  -h, --help    Show this help
 
-For each subcommand, use -h for details:
-  $0 <subcommand> -h
-
-${STY_BOLD}Philosophy:${STY_RST}
-  - Your configs are YOURS. We never modify them without asking.
-  - 'update' only syncs QML code, never touches your settings.
-  - 'migrate' shows exactly what will change and lets you choose.
-  - Automatic backups before any config changes.
-
-${STY_BOLD}${STY_CYAN}Repository: https://github.com/snowarch/quickshell-ii-niri${STY_RST}
-"
+Examples:
+  ./setup              # Interactive menu
+  ./setup install -y   # Non-interactive install
+  ./setup update       # Update and restart shell
+  ./setup doctor       # Fix common issues
+EOF
 }
 
-#####################################################################################
-# Parse subcommand
-#####################################################################################
-
-# If no arguments, launch TUI
-if [ $# -eq 0 ]; then
-    tui_main_menu
-    RET=$?
-    case $RET in
-        1) set -- "install" ;;
-        2) set -- "update" ;;
-        3) set -- "status" ;;
-        4) set -- "migrate" ;;
-        5) set -- "changelog" ;;
+###############################################################################
+# TUI
+###############################################################################
+tui_menu() {
+    clear
+    echo -e "${STY_CYAN}${STY_BOLD}"
+    cat << 'BANNER'
+╔══════════════════════════════════════════╗
+║       ii-niri Setup & Management         ║
+╚══════════════════════════════════════════╝
+BANNER
+    echo -e "${STY_RST}"
+    
+    # Detect current state
+    local is_installed=false
+    [[ -f "${XDG_CONFIG_HOME}/illogical-impulse/installed_true" ]] && is_installed=true
+    
+    if $is_installed; then
+        local installed_ver=$(get_installed_version)
+        local repo_ver=$(get_repo_version)
+        echo -e "  Installed: ${STY_GREEN}${installed_ver}${STY_RST}"
+        echo -e "  Available: ${STY_CYAN}${repo_ver}${STY_RST}"
+        echo ""
+    fi
+    
+    # Menu
+    if command -v gum &>/dev/null; then
+        local choice
+        if $is_installed; then
+            choice=$(gum choose --header "What would you like to do?" \
+                "Update" "Doctor" "Reinstall" "Help" "Exit")
+        else
+            choice=$(gum choose --header "What would you like to do?" \
+                "Install" "Help" "Exit")
+        fi
+    else
+        echo "Select an option:"
+        if $is_installed; then
+            select choice in "Update" "Doctor" "Reinstall" "Help" "Exit"; do break; done
+        else
+            select choice in "Install" "Help" "Exit"; do break; done
+        fi
+    fi
+    
+    case "$choice" in
+        Install|Reinstall) run_install ;;
+        Update) run_update ;;
+        Doctor) run_doctor ;;
+        Help) show_help; exit 0 ;;
         *) exit 0 ;;
     esac
-fi
+}
 
-case $1 in
-  help|--help|-h)
-    showhelp_global
-    exit 0
-    ;;
-  install|install-deps|install-setups|install-files)
-    SUBCMD_NAME=$1
-    SUBCMD_DIR=./sdata/subcmd-install
-    shift
-    ;;
-  update)
-    SUBCMD_NAME="update"
-    SUBCMD_DIR=./sdata/subcmd-install
-    shift
-    ;;
-  doctor)
-    SUBCMD_NAME="doctor"
-    shift
-    ;;
-  migrate)
-    SUBCMD_NAME="migrate"
-    shift
-    ;;
-  status)
-    SUBCMD_NAME="status"
-    shift
-    ;;
-  changelog)
-    SUBCMD_NAME="changelog"
-    shift
-    ;;
-  restore)
-    SUBCMD_NAME="restore"
-    shift
-    ;;
-  *)
-    printf "${STY_RED}Unknown subcommand \"$1\".${STY_RST}\n"
-    showhelp_global
-    exit 1
-    ;;
-esac
-
-#####################################################################################
-# Load options
-#####################################################################################
-if [[ -f "${SUBCMD_DIR}/options.sh" ]]; then
-  source "${SUBCMD_DIR}/options.sh"
-fi
-
-#####################################################################################
-# Run subcommand
-#####################################################################################
-case ${SUBCMD_NAME} in
-  install)
-    # Detect distro
+###############################################################################
+# Install
+###############################################################################
+run_install() {
     detect_distro
-    pause
     
-    # Greeting
-    source ${SUBCMD_DIR}/0.greeting.sh
+    # Greeting & system info
+    source ./sdata/subcmd-install/0.greeting.sh
     
-    # Check for conflicts
+    # Check conflicts
     check_conflicts
     
     # 1. Dependencies
-    if [[ "${SKIP_ALLDEPS}" != true ]]; then
-      source ${SUBCMD_DIR}/1.deps-router.sh
+    if [[ "${SKIP_DEPS}" != "true" ]]; then
+        source ./sdata/subcmd-install/1.deps-router.sh
     fi
     
-    # 2. System setup
-    if [[ "${SKIP_ALLSETUPS}" != true ]]; then
-      source ${SUBCMD_DIR}/2.setups.sh
+    # 2. System setup (groups, services)
+    if [[ "${SKIP_SETUPS}" != "true" ]]; then
+        source ./sdata/subcmd-install/2.setups.sh
     fi
     
     # 3. Config files
-    if [[ "${SKIP_ALLFILES}" != true ]]; then
-      source ${SUBCMD_DIR}/3.files.sh
+    if [[ "${SKIP_FILES}" != "true" ]]; then
+        source ./sdata/subcmd-install/3.files.sh
     fi
-    ;;
     
-  install-deps)
-    detect_distro
-    pause
-    if [[ "${SKIP_ALLDEPS}" != true ]]; then
-      source ${SUBCMD_DIR}/1.deps-router.sh
-    fi
-    ;;
-    
-  install-setups)
-    detect_distro
-    pause
-    if [[ "${SKIP_ALLSETUPS}" != true ]]; then
-      source ${SUBCMD_DIR}/2.setups.sh
-    fi
-    ;;
-    
-  install-files)
-    detect_distro
-    pause
-    if [[ "${SKIP_ALLFILES}" != true ]]; then
-      source ${SUBCMD_DIR}/3.files.sh
-    fi
-    ;;
-    
-  update)
-    # Safe update: only syncs QML code, never touches user configs
+    # Set version tracking
+    set_installed_version "$(get_repo_version)" "$(get_repo_commit)" "setup"
+}
+
+###############################################################################
+# Update
+###############################################################################
+run_update() {
     detect_distro
     
-    # Check if update is needed
-    installed_ver=$(get_installed_version)
-    installed_commit=$(get_installed_commit)
-    repo_ver=$(get_repo_version)
-    repo_commit=$(get_repo_commit)
+    # Check versions
+    local installed_ver=$(get_installed_version)
+    local installed_commit=$(get_installed_commit)
+    local repo_ver=$(get_repo_version)
+    local repo_commit=$(get_repo_commit)
     
-    if [[ "$installed_ver" == "$repo_ver" && "$installed_commit" == "$repo_commit" ]]; then
-      echo ""
-      echo -e "${STY_GREEN}${STY_BOLD}✓ Already up to date${STY_RST}"
-      echo -e "  Version: $installed_ver ($installed_commit)"
-      echo ""
-      
-      # Still check for pending migrations
-      pending_count=$(count_pending_migrations)
-      if [[ "$pending_count" -gt 0 ]]; then
-        echo -e "${STY_YELLOW}Note: $pending_count pending migration(s) available.${STY_RST}"
-        echo -e "Run: ${STY_CYAN}./setup migrate${STY_RST} to review"
-      fi
-      exit 0
+    # Detect existing install without version tracking
+    if [[ "$installed_ver" == "0.0.0" ]] && [[ -f "${XDG_CONFIG_HOME}/illogical-impulse/installed_true" ]]; then
+        log_info "Detected existing installation without version tracking"
+        log_info "Creating version tracking files..."
+    elif [[ "$installed_ver" == "$repo_ver" && "$installed_commit" == "$repo_commit" ]]; then
+        echo -e "${STY_GREEN}✓ Already up to date${STY_RST} ($installed_ver)"
+        
+        # Check pending migrations
+        local pending=$(count_pending_migrations)
+        if [[ "$pending" -gt 0 ]]; then
+            echo -e "${STY_YELLOW}$pending pending migration(s) available${STY_RST}"
+            if $ask; then
+                read -p "Apply migrations now? [Y/n] " -n 1 -r
+                echo
+                [[ ! $REPLY =~ ^[Nn]$ ]] && run_migrations_interactive
+            fi
+        fi
+        return 0
     fi
     
-    echo ""
-    echo -e "${STY_CYAN}${STY_BOLD}Updating ii-niri${STY_RST}"
-    echo -e "  From: $installed_ver ($installed_commit)"
-    echo -e "  To:   $repo_ver ($repo_commit)"
+    echo -e "${STY_CYAN}Updating ii-niri${STY_RST}"
+    echo -e "  From: $installed_ver → $repo_ver"
     echo ""
     
-    pause
+    $ask && pause
+    
+    # Sync QML code only
     export IS_UPDATE=true
-    
-    # Check for new dependencies (optional)
-    if [[ "${SKIP_ALLDEPS}" != true ]]; then
-      source ${SUBCMD_DIR}/1.deps-router.sh
-    fi
-    
-    # Sync QML code only (no config migrations)
     export SKIP_MIGRATIONS=true
-    if [[ "${SKIP_ALLFILES}" != true ]]; then
-      source ${SUBCMD_DIR}/3.files.sh
+    export quiet=true
+    
+    II_SOURCE="${REPO_ROOT}"
+    II_TARGET="${XDG_CONFIG_HOME}/quickshell/ii"
+    
+    # Backup before update
+    log_info "Creating backup..."
+    create_update_backup "$II_TARGET" >/dev/null
+    
+    # Generate manifest
+    generate_manifest "$II_SOURCE" "${II_TARGET}/.ii-manifest.new"
+    
+    # Sync root QML files
+    for qml in "${II_SOURCE}"/*.qml; do
+        [[ -f "$qml" ]] && cp -f "$qml" "${II_TARGET}/$(basename "$qml")"
+    done
+    
+    # Sync directories
+    for dir in modules services scripts assets translations; do
+        [[ -d "${II_SOURCE}/${dir}" ]] && rsync -a --delete "${II_SOURCE}/${dir}/" "${II_TARGET}/${dir}/"
+    done
+    
+    # Sync requirements.txt
+    [[ -f "${II_SOURCE}/requirements.txt" ]] && cp -f "${II_SOURCE}/requirements.txt" "${II_TARGET}/"
+    
+    # Finalize manifest and cleanup orphans
+    mv "${II_TARGET}/.ii-manifest.new" "${II_TARGET}/.ii-manifest"
+    cleanup_orphans "$II_TARGET" "${II_TARGET}/.ii-manifest"
+    
+    # Fix permissions
+    find "$II_TARGET/scripts" \( -name "*.sh" -o -name "*.fish" -o -name "*.py" \) -exec chmod +x {} \; 2>/dev/null || true
+    
+    # Update version
+    set_installed_version "$repo_ver" "$repo_commit" "update"
+    
+    # Cleanup old backups
+    cleanup_old_backups "$II_BACKUP_DIR" 5
+    
+    echo -e "${STY_GREEN}✓ Update complete${STY_RST}"
+    
+    # Migrations
+    local pending=$(count_pending_migrations)
+    if [[ "$pending" -gt 0 ]]; then
+        echo ""
+        echo -e "${STY_YELLOW}$pending optional migration(s) available${STY_RST}"
+        if $ask; then
+            read -p "Review and apply? [Y/n] " -n 1 -r
+            echo
+            [[ ! $REPLY =~ ^[Nn]$ ]] && run_migrations_interactive
+        fi
     fi
     
-    # Update version file with new format
-    set_installed_version "$repo_ver" "$repo_commit" "git"
-    
+    # Restart shell
     echo ""
-    echo -e "${STY_GREEN}${STY_BOLD}✓ Update complete${STY_RST}"
-    echo -e "  Now running: $repo_ver ($repo_commit)"
-    
-    # Offer to apply pending migrations immediately
-    pending_count=$(count_pending_migrations)
-    if [[ "$pending_count" -gt 0 ]]; then
-      echo ""
-      echo -e "${STY_YELLOW}There are ${STY_BOLD}$pending_count${STY_RST}${STY_YELLOW} optional config migrations available.${STY_RST}"
-      echo -e "These add new features like OSD for volume keys, new keybinds, etc."
-      echo ""
-      read -p "Review and apply migrations now? [Y/n] " -n 1 -r
-      echo
-      if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-        run_migrations_interactive
-      else
-        echo -e "Skipped. Run ${STY_CYAN}./setup migrate${STY_RST} later to review."
-      fi
-    fi
-    ;;
-  
-  doctor)
-    # Diagnose and fix common issues
-    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-      echo "Usage: $0 doctor"
-      echo ""
-      echo "Diagnose and fix common issues with your ii-niri installation."
-      echo ""
-      echo "Checks:"
-      echo "  - Critical files present"
-      echo "  - Script permissions"
-      echo "  - User config validity"
-      echo "  - Orphan files"
-      echo "  - Dependencies installed"
-      echo "  - Quickshell loads correctly"
-      echo "  - State directories exist"
-      echo "  - Python packages installed"
-      exit 0
-    fi
-    
-    run_doctor
-    ;;
-    
-  migrate)
-    # Interactive migration of user configs
-    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-      echo "Usage: $0 migrate [OPTIONS]"
-      echo ""
-      echo "Interactively apply config migrations."
-      echo "Shows exactly what will change and lets you choose."
-      echo "Automatic backup before any changes."
-      echo ""
-      echo "Options:"
-      echo "  --list     List all migrations and their status"
-      echo "  --apply-all  Apply all pending migrations without prompts"
-      echo "  -h, --help   Show this help"
-      exit 0
-    fi
-    
-    if [[ "$1" == "--list" ]]; then
-      show_migrations_status
-      exit 0
-    fi
-    
-    if [[ "$1" == "--apply-all" ]]; then
-      for migration_id in $(get_pending_migrations); do
-        apply_migration "$migration_id"
-      done
-      exit 0
-    fi
-    
-    run_migrations_interactive
-    ;;
-    
-  status)
-    # Show installation status with new versioning system
-    show_version_status
-    
-    echo ""
-    show_migrations_status
-    
-    echo ""
-    echo -e "${STY_BOLD}Backups:${STY_RST}"
-    backups=($(list_backups))
-    if [[ ${#backups[@]} -eq 0 ]]; then
-      echo "  No backups found"
-    else
-      for backup in "${backups[@]:0:5}"; do
-        echo "  - $backup"
-      done
-      if [[ ${#backups[@]} -gt 5 ]]; then
-        echo "  ... and $((${#backups[@]} - 5)) more"
-      fi
-    fi
-    ;;
-    
-  changelog)
-    # Show changelog
-    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-      echo "Usage: $0 changelog [LINES]"
-      echo ""
-      echo "Show recent changes and release notes."
-      echo ""
-      echo "Options:"
-      echo "  LINES      Number of lines to show (default: 50)"
-      echo "  -h, --help Show this help"
-      exit 0
-    fi
-    
-    lines="${1:-50}"
-    show_changelog "$lines"
-    ;;
-    
-  restore)
-    # Restore from backup
-    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-      echo "Usage: $0 restore [TIMESTAMP]"
-      echo ""
-      echo "Restore configs from a backup."
-      echo "If no timestamp given, shows available backups."
-      exit 0
-    fi
-    
-    if [[ -z "$1" ]]; then
-      echo -e "${STY_CYAN}Available backups:${STY_RST}"
-      echo ""
-      for backup in $(list_backups); do
-        echo "  $backup"
-      done
-      echo ""
-      echo "Usage: $0 restore <timestamp>"
-    else
-      restore_backup "$1"
-    fi
-    ;;
+    log_info "Restarting shell..."
+    qs kill -c ii 2>/dev/null || true
+    sleep 1
+    nohup qs -c ii >/dev/null 2>&1 &
+    disown
+    echo -e "${STY_GREEN}✓ Shell restarted${STY_RST}"
+}
+
+###############################################################################
+# Doctor (delegates to doctor.sh but with fixes)
+###############################################################################
+run_doctor() {
+    run_doctor_with_fixes
+}
+
+###############################################################################
+# Parse args
+###############################################################################
+COMMAND=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        install) COMMAND="install"; shift ;;
+        update) COMMAND="update"; shift ;;
+        doctor) COMMAND="doctor"; shift ;;
+        -y|--yes) ask=false; shift ;;
+        -q|--quiet) quiet=true; shift ;;
+        -h|--help) show_help; exit 0 ;;
+        *) echo "Unknown: $1"; show_help; exit 1 ;;
+    esac
+done
+
+###############################################################################
+# Run
+###############################################################################
+case "$COMMAND" in
+    install) run_install ;;
+    update) run_update ;;
+    doctor) run_doctor ;;
+    "") tui_menu ;;
 esac
