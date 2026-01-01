@@ -885,7 +885,7 @@ Singleton {
             }
 
             property JsonObject widgetBar: JsonObject {
-                property bool enable: false // Disabled by default - use sidebar widgets tab instead
+                property bool enable: true
                 property int width: 320
                 property string position: "left" // "left" or "right"
                 property bool showMedia: true
