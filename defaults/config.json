@@ -509,6 +509,9 @@
       "delay": 300,
       "enable": true
     },
+    "tools": {
+      "enable": false
+    },
     "wallhaven": {
       "enable": true,
       "limit": 24,
@@ -520,7 +523,13 @@
     },
     "reddit": {
       "enable": false,
-      "subreddits": ["unixporn", "linux", "archlinux", "kde", "gnome"],
+      "subreddits": [
+        "unixporn",
+        "linux",
+        "archlinux",
+        "kde",
+        "gnome"
+      ],
       "limit": 25
     },
     "widgets": {
@@ -533,11 +542,23 @@
       "controls": true,
       "status": true,
       "crypto": false,
-      "widgetOrder": ["media", "week", "context", "note", "launch", "controls", "status", "crypto"],
+      "widgetOrder": [
+        "media",
+        "week",
+        "context",
+        "note",
+        "launch",
+        "controls",
+        "status",
+        "crypto"
+      ],
       "spacing": 8,
       "crypto_settings": {
         "refreshInterval": 60,
-        "coins": ["bitcoin", "ethereum"]
+        "coins": [
+          "bitcoin",
+          "ethereum"
+        ]
       },
       "glance": {
         "showVolume": true,
@@ -562,10 +583,26 @@
         "showLock": true
       },
       "quickLaunch": [
-        { "icon": "folder", "name": "Files", "cmd": "/usr/bin/nautilus" },
-        { "icon": "terminal", "name": "Terminal", "cmd": "/usr/bin/kitty" },
-        { "icon": "web", "name": "Browser", "cmd": "/usr/bin/firefox" },
-        { "icon": "code", "name": "Code", "cmd": "/usr/bin/code" }
+        {
+          "icon": "folder",
+          "name": "Files",
+          "cmd": "/usr/bin/nautilus"
+        },
+        {
+          "icon": "terminal",
+          "name": "Terminal",
+          "cmd": "/usr/bin/kitty"
+        },
+        {
+          "icon": "web",
+          "name": "Browser",
+          "cmd": "/usr/bin/firefox"
+        },
+        {
+          "icon": "code",
+          "name": "Code",
+          "cmd": "/usr/bin/code"
+        }
       ]
     }
   },
@@ -788,6 +825,7 @@
     "iiBackground",
     "iiBackdrop",
     "iiCheatsheet",
+    "iiControlPanel",
     "iiDock",
     "iiLock",
     "iiMediaControls",

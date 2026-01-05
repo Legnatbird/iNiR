@@ -928,6 +928,7 @@ ContentPage {
                     }
                 }
             }
+
             SettingsSwitch {
                 buttonIcon: "memory"
                 text: Translation.tr('Keep right sidebar loaded')
@@ -1031,6 +1032,16 @@ ContentPage {
                     onCheckedChanged: Config.setNestedValue("sidebar.reddit.enable", checked)
                     StyledToolTip {
                         text: Translation.tr("Browse posts from your favorite subreddits")
+                    }
+                }
+
+                SettingsSwitch {
+                    buttonIcon: "build"
+                    text: Translation.tr("Tools")
+                    checked: Config.options.sidebar?.tools?.enable ?? false
+                    onCheckedChanged: Config.setNestedValue("sidebar.tools.enable", checked)
+                    StyledToolTip {
+                        text: Translation.tr("Niri debug options and quick actions")
                     }
                 }
             }

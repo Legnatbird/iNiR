@@ -102,7 +102,7 @@ Singleton {
             
             // Panel system
             property list<string> enabledPanels: [
-                "iiBar", "iiBackground", "iiCheatsheet", "iiDock", "iiLock", "iiMediaControls", 
+                "iiBar", "iiBackground", "iiCheatsheet", "iiControlPanel", "iiDock", "iiLock", "iiMediaControls", 
                 "iiNotificationPopup", "iiOnScreenDisplay", "iiOnScreenKeyboard", "iiOverlay", 
                 "iiOverview", "iiPolkit", "iiRegionSelector", "iiScreenCorners", "iiSessionScreen", 
                 "iiSidebarLeft", "iiSidebarRight", "iiVerticalBar", "iiWallpaperSelector", "iiAltSwitcher", "iiClipboard"
@@ -801,6 +801,10 @@ Singleton {
                     property bool enable: false
                     property list<string> subreddits: ["unixporn", "linux", "archlinux", "kde", "gnome"]
                     property int limit: 25
+                }
+                // Tools tab - Niri debug options and quick actions
+                property JsonObject tools: JsonObject {
+                    property bool enable: false
                 }
                 // Widgets tab in left sidebar
                 property JsonObject widgets: JsonObject {

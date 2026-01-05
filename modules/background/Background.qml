@@ -220,8 +220,8 @@ Variants {
                 readonly property bool useParallax: bgRoot.fillMode === "fill" && !bgRoot.wallpaperIsGif
                 x: useParallax ? (-(bgRoot.movableXSpace) - (effectiveValueX - 0.5) * 2 * bgRoot.movableXSpace) : 0
                 y: useParallax ? (-(bgRoot.movableYSpace) - (effectiveValueY - 0.5) * 2 * bgRoot.movableYSpace) : 0
-                Behavior on x { NumberAnimation { duration: useParallax ? 600 : 0; easing.type: Easing.OutCubic } }
-                Behavior on y { NumberAnimation { duration: useParallax ? 600 : 0; easing.type: Easing.OutCubic } }
+                Behavior on x { NumberAnimation { duration: wallpaperContainer.useParallax ? 600 : 0; easing.type: Easing.OutCubic } }
+                Behavior on y { NumberAnimation { duration: wallpaperContainer.useParallax ? 600 : 0; easing.type: Easing.OutCubic } }
                 width: useParallax ? (bgRoot.wallpaperWidth / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale) : bgRoot.screen.width
                 height: useParallax ? (bgRoot.wallpaperHeight / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale) : bgRoot.screen.height
 

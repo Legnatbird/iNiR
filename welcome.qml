@@ -2,366 +2,840 @@
 //@ pragma Env QS_NO_RELOAD_POPUP=1
 //@ pragma Env QT_QUICK_CONTROLS_STYLE=Basic
 //@ pragma Env QT_QUICK_FLICKABLE_WHEEL_DECELERATION=10000
-//@ pragma Env QT_SCALE_FACTOR=1
 
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Window
+import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 
-ApplicationWindow {
+Scope {
     id: root
     property string firstRunFilePath: FileUtils.trimFileProtocol(`${Directories.state}/user/first_run.txt`)
     property string firstRunFileContent: "This file is just here to confirm you've been greeted :>"
-    property real contentPadding: 8
-    property bool showNextTime: false
-    visible: true
-    onClosing: {
-        Quickshell.execDetached([
-            "/usr/bin/notify-send",
-            Translation.tr("Welcome app"),
-            Translation.tr("Press Super+/ for all keyboard shortcuts."),
-            "-a", "Shell"
-        ]);
-        Qt.quit();
+    property int currentStep: 0
+    readonly property int totalSteps: 5
+    property bool wizardVisible: true
+    property var focusedScreen: Quickshell.screens[0]
+
+    readonly property var steps: [
+        { icon: "waving_hand", title: Translation.tr("Welcome") },
+        { icon: "palette", title: Translation.tr("Appearance") },
+        { icon: "dashboard", title: Translation.tr("Layout") },
+        { icon: "tune", title: Translation.tr("Features") },
+        { icon: "rocket_launch", title: Translation.tr("Ready") }
+    ]
+
+    function finish() {
+        ShellExec.writeFileViaShell(root.firstRunFilePath, root.firstRunFileContent)
+        Quickshell.execDetached(["/usr/bin/notify-send", Translation.tr("Welcome to inir"), Translation.tr("Press Super+/ for all keyboard shortcuts."), "-a", "Shell"])
+        Qt.quit()
     }
-    title: Translation.tr("iNiR - Welcome")
 
     Component.onCompleted: {
-        MaterialThemeLoader.reapplyTheme();
+        MaterialThemeLoader.reapplyTheme()
         Config.readWriteDelay = 0
     }
 
-    minimumWidth: 600
-    minimumHeight: 400
-    width: 900
-    height: 650
-    color: Appearance.m3colors.m3background
+    PanelWindow {
+        id: wizardPanel
+        visible: root.wizardVisible
+        color: "transparent"
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.namespace: "quickshell:welcome"
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+        anchors { top: true; bottom: true; left: true; right: true }
+        implicitWidth: root.focusedScreen?.width ?? 1920
+        implicitHeight: root.focusedScreen?.height ?? 1080
 
-    Process {
-        id: konachanWallProc
-        property string status: ""
-        command: ["/usr/bin/bash", Quickshell.shellPath("scripts/colors/random/random_konachan_wall.sh")]
-        stdout: SplitParser {
-            onRead: data => {
-                konachanWallProc.status = data.trim();
-            }
-        }
-    }
-
-    ColumnLayout {
-        anchors {
-            fill: parent
-            margins: contentPadding
-        }
-
-        Item {
-            visible: Config.options?.windows?.showTitlebar ?? true
-            Layout.fillWidth: true
-            implicitHeight: Math.max(welcomeText.implicitHeight, windowControlsRow.implicitHeight)
-            StyledText {
-                id: welcomeText
-                anchors {
-                    left: (Config.options?.windows?.centerTitle ?? false) ? undefined : parent.left
-                    horizontalCenter: (Config.options?.windows?.centerTitle ?? false) ? parent.horizontalCenter : undefined
-                    verticalCenter: parent.verticalCenter
-                    leftMargin: 12
-                }
-                color: Appearance.colors.colOnLayer0
-                text: Translation.tr("Welcome to iNiR")
-                font {
-                    family: Appearance.font.family.title
-                    pixelSize: Appearance.font.pixelSize.title
-                    variableAxes: Appearance.font.variableAxes.title
-                }
-            }
-            RowLayout {
-                id: windowControlsRow
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.right: parent.right
-                StyledText {
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    text: Translation.tr("Show next time")
-                }
-                StyledSwitch {
-                    checked: root.showNextTime
-                    scale: 0.6
-                    Layout.alignment: Qt.AlignVCenter
-                    onCheckedChanged: {
-                        if (checked) {
-                            Quickshell.execDetached(["/usr/bin/rm", root.firstRunFilePath]);
-                        } else {
-                            ShellExec.writeFileViaShell(root.firstRunFilePath, root.firstRunFileContent)
-                        }
-                    }
-                }
-                RippleButton {
-                    buttonRadius: Appearance.rounding.full
-                    implicitWidth: 35
-                    implicitHeight: 35
-                    onClicked: root.close()
-                    contentItem: MaterialSymbol {
-                        anchors.centerIn: parent
-                        horizontalAlignment: Text.AlignHCenter
-                        text: "close"
-                        iconSize: 20
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Tip: Close windows with Super+Q")
-                    }
-                }
+        // Blurred wallpaper background
+        Image {
+            id: bgWallpaper
+            anchors.fill: parent
+            source: Config.options?.background?.wallpaperPath ?? ""
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            layer.enabled: true
+            layer.effect: FastBlur { radius: 64 }
+            transform: Scale {
+                origin.x: bgWallpaper.width / 2
+                origin.y: bgWallpaper.height / 2
+                xScale: 1.1; yScale: 1.1
             }
         }
 
+        // Dim overlay
         Rectangle {
-            color: Appearance.m3colors.m3surfaceContainerLow
-            radius: Appearance.rounding.windowRounding - root.contentPadding
-            implicitHeight: contentColumn.implicitHeight
-            implicitWidth: contentColumn.implicitWidth
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+            anchors.fill: parent
+            color: Qt.rgba(0, 0, 0, 0.45)
+        }
 
-            ContentPage {
-                id: contentColumn
+        // Click outside to skip
+        MouseArea {
+            anchors.fill: parent
+            onClicked: root.finish()
+        }
+
+        // Main wizard card
+        Item {
+            id: wizardCard
+            anchors.centerIn: parent
+            width: Math.min(780, parent.width - 60)
+            height: Math.min(620, parent.height - 60)
+            focus: true
+
+            // Entrance animation
+            scale: root.wizardVisible ? 1 : 0.9
+            opacity: root.wizardVisible ? 1 : 0
+            Behavior on scale { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: 250 } }
+
+            // Keyboard navigation
+            Keys.onEscapePressed: root.finish()
+            Keys.onLeftPressed: if (root.currentStep > 0) root.currentStep--
+            Keys.onRightPressed: if (root.currentStep < root.totalSteps - 1) root.currentStep++
+            Keys.onReturnPressed: root.currentStep < root.totalSteps - 1 ? root.currentStep++ : root.finish()
+            Keys.onEnterPressed: root.currentStep < root.totalSteps - 1 ? root.currentStep++ : root.finish()
+
+            // Shadow (hide in aurora)
+            StyledRectangularShadow {
+                target: cardBg
+                visible: !Appearance.auroraEverywhere
+            }
+
+            // Card background - style-aware
+            Rectangle {
+                id: cardBg
                 anchors.fill: parent
+                clip: true
+                
+                radius: Appearance.inirEverywhere ? Appearance.inir.roundingLarge
+                      : Appearance.rounding.large
+                
+                // Base color
+                color: Appearance.inirEverywhere ? Appearance.inir.colLayer1
+                     : Appearance.auroraEverywhere ? "transparent"
+                     : Appearance.colors.colLayer1
+                
+                border.width: Appearance.inirEverywhere ? 1 : (Appearance.auroraEverywhere ? 0 : 1)
+                border.color: Appearance.inirEverywhere ? Appearance.inir.colBorder
+                            : Appearance.colors.colLayer0Border
 
-                // ══════════════════════════════════════════════════════════════
-                // 1. STYLE & WALLPAPER
-                // ══════════════════════════════════════════════════════════════
-                ContentSection {
-                    icon: "format_paint"
-                    title: Translation.tr("Style & wallpaper")
+                Behavior on color { ColorAnimation { duration: 200 } }
+                Behavior on border.color { ColorAnimation { duration: 200 } }
 
-                    ButtonGroup {
-                        Layout.alignment: Qt.AlignHCenter
-                        LightDarkPreferenceButton { dark: false }
-                        LightDarkPreferenceButton { dark: true }
-                    }
-
-                    RowLayout {
-                        Layout.alignment: Qt.AlignHCenter
-                        RippleButtonWithIcon {
-                            visible: (Config.options?.policies?.weeb ?? 0) >= 1
-                            buttonRadius: Appearance.rounding.small
-                            materialIcon: "ifl"
-                            mainText: konachanWallProc.running ? Translation.tr("Be patient...") : Translation.tr("Random: Konachan")
-                            onClicked: { konachanWallProc.running = true; }
-                            StyledToolTip {
-                                text: Translation.tr("Random SFW Anime wallpaper from Konachan\nImage is saved to ~/Pictures/Wallpapers")
-                            }
-                        }
-                        RippleButtonWithIcon {
-                            materialIcon: "wallpaper"
-                            mainText: Translation.tr("Choose wallpaper")
-                            onClicked: {
-                                Quickshell.execDetached([`${Directories.wallpaperSwitchScriptPath}`]);
-                            }
-                        }
-                    }
-
-                    NoticeBox {
-                        Layout.fillWidth: true
-                        text: Translation.tr("Tip: Type /dark, /light or /wallpaper in the overview search (Super+Space).")
-                    }
+                // Aurora: Wallpaper blur inside card
+                Image {
+                    visible: Appearance.auroraEverywhere
+                    anchors.fill: parent
+                    source: Config.options?.background?.wallpaperPath ?? ""
+                    fillMode: Image.PreserveAspectCrop
+                    
+                    // Position to align with background wallpaper
+                    x: -wizardCard.x
+                    y: -wizardCard.y
+                    width: wizardPanel.width
+                    height: wizardPanel.height
+                    
+                    layer.enabled: Appearance.effectsEnabled
+                    layer.effect: FastBlur { radius: 40 }
                 }
+                
+                // Aurora: Tinted overlay
+                Rectangle {
+                    anchors.fill: parent
+                    visible: Appearance.auroraEverywhere
+                    radius: parent.radius
+                    color: ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.25)
+                }
+            }
 
-                // ══════════════════════════════════════════════════════════════
-                // 2. KEYBINDS
-                // ══════════════════════════════════════════════════════════════
-                ContentSection {
-                    icon: "keyboard"
-                    title: Translation.tr("Getting started")
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 28
+                spacing: 20
 
-                    component ShortcutRow: RowLayout {
-                        required property var keys
-                        required property string desc
-                        spacing: 6
-                        RowLayout {
-                            Layout.minimumWidth: 150
-                            spacing: 2
-                            Repeater {
-                                model: keys
-                                delegate: RowLayout {
-                                    spacing: 2
-                                    KeyboardKey { key: modelData }
-                                    StyledText {
-                                        visible: index < keys.length - 1
-                                        text: "+"
-                                        color: Appearance.colors.colSubtext
-                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                // Header with step indicator
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    // Step circles
+                    Row {
+                        Layout.alignment: Qt.AlignHCenter
+                        spacing: 0
+
+                        Repeater {
+                            model: root.steps
+                            Row {
+                                required property int index
+                                required property var modelData
+
+                                Rectangle {
+                                    id: stepCircle
+                                    width: 38; height: 38; radius: 19
+                                    
+                                    color: index < root.currentStep ? Appearance.colors.colPrimary
+                                         : index === root.currentStep ? Appearance.colors.colPrimaryContainer
+                                         : Appearance.colors.colLayer2
+                                    
+                                    border.width: index === root.currentStep ? 2 : 0
+                                    border.color: Appearance.colors.colPrimary
+                                    
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutBack } }
+                                    Behavior on border.width { NumberAnimation { duration: 150 } }
+                                    
+                                    scale: index === root.currentStep ? 1.15 : 1.0
+
+                                    MaterialSymbol {
+                                        anchors.centerIn: parent
+                                        text: index < root.currentStep ? "check" : modelData.icon
+                                        iconSize: index === root.currentStep ? 20 : 18
+                                        color: index < root.currentStep ? Appearance.colors.colOnPrimary
+                                             : index === root.currentStep ? Appearance.colors.colOnPrimaryContainer
+                                             : Appearance.colors.colOnLayer2
+                                        
+                                        Behavior on iconSize { NumberAnimation { duration: 150 } }
+                                    }
+                                }
+
+                                // Connector line with progress
+                                Item {
+                                    visible: index < root.steps.length - 1
+                                    width: 36; height: 4
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: 2
+                                        color: Appearance.colors.colLayer2
+                                    }
+                                    
+                                    Rectangle {
+                                        height: parent.height
+                                        radius: 2
+                                        color: Appearance.colors.colPrimary
+                                        width: index < root.currentStep ? parent.width : 0
+                                        Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
                                     }
                                 }
                             }
                         }
-                        StyledText {
-                            text: desc
-                            color: Appearance.colors.colOnLayer1
-                            font.pixelSize: Appearance.font.pixelSize.small
-                        }
                     }
 
-                    GridLayout {
-                        Layout.fillWidth: true
-                        columns: 2
-                        columnSpacing: 24
-                        rowSpacing: 6
-
-                        ShortcutRow { keys: ["Super", "Space"]; desc: Translation.tr("Search & launch apps") }
-                        ShortcutRow { keys: ["Alt", "Tab"]; desc: Translation.tr("Switch windows") }
-                        ShortcutRow { keys: ["Super", "Q"]; desc: Translation.tr("Close window") }
-                        ShortcutRow { keys: ["Super", "V"]; desc: Translation.tr("Clipboard") }
-                        ShortcutRow { keys: ["Super", "Slash"]; desc: Translation.tr("All shortcuts") }
-                        ShortcutRow { keys: ["Super", "Comma"]; desc: Translation.tr("Settings") }
-                    }
-                }
-
-                // ══════════════════════════════════════════════════════════════
-                // 3. BAR
-                // ══════════════════════════════════════════════════════════════
-                ContentSection {
-                    icon: "screenshot_monitor"
-                    title: Translation.tr("Bar")
-
-                    ConfigRow {
-                        ContentSubsection {
-                            title: Translation.tr("Bar position")
-                            ConfigSelectionArray {
-                                currentValue: ((Config.options?.bar?.bottom ?? false) ? 1 : 0) | ((Config.options?.bar?.vertical ?? false) ? 2 : 0)
-                                onSelected: newValue => {
-                                    Config.setNestedValue("bar.bottom", (newValue & 1) !== 0);
-                                    Config.setNestedValue("bar.vertical", (newValue & 2) !== 0);
-                                }
-                                options: [
-                                    { displayName: Translation.tr("Top"), icon: "arrow_upward", value: 0 },
-                                    { displayName: Translation.tr("Left"), icon: "arrow_back", value: 2 },
-                                    { displayName: Translation.tr("Bottom"), icon: "arrow_downward", value: 1 },
-                                    { displayName: Translation.tr("Right"), icon: "arrow_forward", value: 3 }
-                                ]
-                            }
-                        }
-                        ContentSubsection {
-                            title: Translation.tr("Bar style")
-                            ConfigSelectionArray {
-                                currentValue: Config.options?.bar?.cornerStyle ?? 0
-                                onSelected: newValue => {
-                                    Config.setNestedValue("bar.cornerStyle", newValue);
-                                }
-                                options: [
-                                    { displayName: Translation.tr("Hug"), icon: "line_curve", value: 0 },
-                                    { displayName: Translation.tr("Float"), icon: "page_header", value: 1 },
-                                    { displayName: Translation.tr("Rect"), icon: "toolbar", value: 2 }
-                                ]
-                            }
-                        }
-                    }
-
-                    ContentSubsection {
-                        title: Translation.tr("Wallpaper mode")
-                        ConfigSelectionArray {
-                            currentValue: (Config.options?.background?.backdrop?.hideWallpaper ?? false) ? 1 : 0
-                            onSelected: newValue => {
-                                Config.setNestedValue("background.backdrop.hideWallpaper", newValue === 1);
-                            }
-                            options: [
-                                { displayName: Translation.tr("Normal"), icon: "image", value: 0 },
-                                { displayName: Translation.tr("Backdrop only"), icon: "blur_on", value: 1 }
-                            ]
-                        }
-                    }
-                }
-
-                // ══════════════════════════════════════════════════════════════
-                // 4. PREFERENCES
-                // ══════════════════════════════════════════════════════════════
-                ContentSection {
-                    icon: "tune"
-                    title: Translation.tr("Preferences")
-
-                    ConfigRow {
-                        Layout.fillWidth: true
-
-                        ContentSubsection {
-                            title: Translation.tr("Anime wallpapers")
-                            ConfigSelectionArray {
-                                currentValue: Config.options?.policies?.weeb ?? 0
-                                onSelected: newValue => {
-                                    Config.setNestedValue("policies.weeb", newValue);
-                                }
-                                options: [
-                                    { displayName: Translation.tr("Off"), icon: "close", value: 0 },
-                                    { displayName: Translation.tr("On"), icon: "check", value: 1 }
-                                ]
-                            }
-                        }
-
-                        ContentSubsection {
-                            title: Translation.tr("AI features")
-                            ConfigSelectionArray {
-                                currentValue: Config.options?.policies?.ai ?? 0
-                                onSelected: newValue => {
-                                    Config.setNestedValue("policies.ai", newValue);
-                                }
-                                options: [
-                                    { displayName: Translation.tr("Off"), icon: "close", value: 0 },
-                                    { displayName: Translation.tr("On"), icon: "check", value: 1 },
-                                    { displayName: Translation.tr("Local"), icon: "computer", value: 2 }
-                                ]
-                            }
-                        }
-                    }
-                }
-
-                // ══════════════════════════════════════════════════════════════
-                // 5. RESOURCES
-                // ══════════════════════════════════════════════════════════════
-                ContentSection {
-                    icon: "info"
-                    title: Translation.tr("Resources")
-
-                    Flow {
-                        Layout.fillWidth: true
+                    // Step title
+                    StyledText {
                         Layout.alignment: Qt.AlignHCenter
-                        Layout.maximumWidth: 720
-                        spacing: 5
-
-                        RippleButtonWithIcon {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 52
-                            buttonRadius: Appearance.rounding.normal
-                            materialIcon: "tune"
-                            mainText: Translation.tr("Open Settings")
-                            onClicked: {
-                                Quickshell.execDetached(["/usr/bin/qs", "-c", "ii", "ipc", "call", "settings", "open"]);
-                            }
-                        }
-                        RippleButtonWithIcon {
-                            materialIcon: "article"
-                            mainText: Translation.tr("Niri Wiki")
-                            onClicked: {
-                                Qt.openUrlExternally("https://github.com/YaLTeR/niri/wiki");
-                            }
-                        }
-                        RippleButtonWithIcon {
-                            nerdIcon: "󰊤"
-                            mainText: "GitHub"
-                            onClicked: {
-                                Qt.openUrlExternally("https://github.com/snowarch/inir");
-                            }
-                        }
+                        text: root.steps[root.currentStep].title
+                        font.family: Appearance.font.family.title
+                        font.pixelSize: Appearance.font.pixelSize.hugeass
+                        color: Appearance.colors.colOnLayer1
                     }
                 }
 
+                // Separator
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 20
+                    Layout.rightMargin: 20
+                    height: 1
+                    color: Appearance.inirEverywhere ? Appearance.inir.colBorderSubtle
+                         : Appearance.colors.colOutlineVariant
+                }
+
+                // Content area with transitions
                 Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    clip: true
+
+                    StackLayout {
+                        id: stepStack
+                        anchors.fill: parent
+                        currentIndex: root.currentStep
+                        
+                        // Step transition
+                        property int prevStep: 0
+                        onCurrentIndexChanged: {
+                            stepAnim.direction = currentIndex > prevStep ? 1 : -1
+                            stepAnim.restart()
+                            prevStep = currentIndex
+                        }
+                        
+                        opacity: 1
+                        transform: Translate { id: stepTranslate; x: 0 }
+                        
+                        ParallelAnimation {
+                            id: stepAnim
+                            property int direction: 1
+                            
+                            SequentialAnimation {
+                                NumberAnimation { target: stepStack; property: "opacity"; to: 0.3; duration: 80 }
+                                NumberAnimation { target: stepStack; property: "opacity"; to: 1; duration: 150 }
+                            }
+                            SequentialAnimation {
+                                NumberAnimation { target: stepTranslate; property: "x"; to: stepAnim.direction * -20; duration: 80; easing.type: Easing.InQuad }
+                                PropertyAction { target: stepTranslate; property: "x"; value: stepAnim.direction * 20 }
+                                NumberAnimation { target: stepTranslate; property: "x"; to: 0; duration: 150; easing.type: Easing.OutCubic }
+                            }
+                        }
+
+                        WelcomeContent {}
+                        ThemeContent {}
+                        LayoutContent {}
+                        FeaturesContent {}
+                        ReadyContent {}
+                    }
+                }
+
+                // Navigation buttons
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    DialogButton {
+                        visible: root.currentStep > 0
+                        buttonText: Translation.tr("Back")
+                        colBackground: Appearance.colors.colLayer2
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        onClicked: root.currentStep--
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    // Keyboard hint
+                    RowLayout {
+                        spacing: 6
+                        opacity: 0.6
+                        
+                        Row {
+                            spacing: 2
+                            KeyboardKey { key: "←" }
+                            KeyboardKey { key: "→" }
+                        }
+                        StyledText {
+                            text: Translation.tr("navigate")
+                            font.pixelSize: Appearance.font.pixelSize.smallest
+                            color: Appearance.colors.colSubtext
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    DialogButton {
+                        buttonText: Translation.tr("Skip")
+                        colBackground: "transparent"
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        onClicked: root.finish()
+                    }
+
+                    DialogButton {
+                        buttonText: root.currentStep === root.totalSteps - 1 ? Translation.tr("Get Started") : Translation.tr("Continue")
+                        colBackground: Appearance.colors.colPrimary
+                        colBackgroundHover: Appearance.colors.colPrimaryHover
+                        colText: Appearance.colors.colOnPrimary
+                        onClicked: root.currentStep < root.totalSteps - 1 ? root.currentStep++ : root.finish()
+                    }
                 }
             }
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // STEP CONTENT COMPONENTS
+    // ═══════════════════════════════════════════════════════════════════════
+
+    component WelcomeContent: ColumnLayout {
+        spacing: 20
+
+        Item { Layout.fillHeight: true; Layout.maximumHeight: 20 }
+
+        MaterialShapeWrappedMaterialSymbol {
+            Layout.alignment: Qt.AlignHCenter
+            text: "waving_hand"
+            iconSize: 52
+            padding: 16
+            shape: MaterialShape.Shape.Cookie4Sided
+            color: Appearance.colors.colPrimaryContainer
+            colSymbol: Appearance.colors.colOnPrimaryContainer
+        }
+
+        StyledText {
+            Layout.alignment: Qt.AlignHCenter
+            text: Translation.tr("Welcome to inir")
+            font.family: Appearance.font.family.title
+            font.pixelSize: Appearance.font.pixelSize.hugeass + 4
+        }
+
+        StyledText {
+            Layout.alignment: Qt.AlignHCenter
+            text: Translation.tr("A modern, customizable shell for Niri compositor")
+            color: Appearance.colors.colSubtext
+            font.pixelSize: Appearance.font.pixelSize.normal
+        }
+
+        // Keyboard shortcuts
+        Rectangle {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.topMargin: 16
+            implicitWidth: shortcutsGrid.implicitWidth + 32
+            implicitHeight: shortcutsGrid.implicitHeight + 24
+            radius: Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
+            color: Appearance.inirEverywhere ? Appearance.inir.colLayer2
+                 : Appearance.auroraEverywhere ? ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
+                 : Appearance.colors.colLayer2
+            border.width: Appearance.inirEverywhere ? 1 : 0
+            border.color: Appearance.inir.colBorderSubtle
+
+            GridLayout {
+                id: shortcutsGrid
+                anchors.centerIn: parent
+                columns: 2
+                columnSpacing: 40
+                rowSpacing: 8
+
+                Repeater {
+                    model: [
+                        { keys: "Super+Space", desc: Translation.tr("App launcher") },
+                        { keys: "Super+/", desc: Translation.tr("All shortcuts") },
+                        { keys: "Super+Q", desc: Translation.tr("Close window") },
+                        { keys: "Super+,", desc: Translation.tr("Settings") }
+                    ]
+                    RowLayout {
+                        required property var modelData
+                        spacing: 10
+                        Row {
+                            spacing: 3
+                            Repeater {
+                                model: modelData.keys.split("+")
+                                KeyboardKey { 
+                                    required property string modelData
+                                    key: modelData 
+                                }
+                            }
+                        }
+                        StyledText {
+                            text: modelData.desc
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colSubtext
+                        }
+                    }
+                }
+            }
+        }
+
+        Item { Layout.fillHeight: true }
+    }
+
+    component ThemeContent: ColumnLayout {
+        spacing: 20
+
+        // Light/Dark toggle
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 16
+            LightDarkPreferenceButton { dark: false }
+            LightDarkPreferenceButton { dark: true }
+        }
+
+        // Global style selector
+        SettingsGroup {
+            Layout.fillWidth: true
+            Layout.maximumWidth: 520
+            Layout.alignment: Qt.AlignHCenter
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    MaterialSymbol { text: "style"; iconSize: 20; color: Appearance.colors.colPrimary }
+                    StyledText { text: Translation.tr("Visual Style"); font.pixelSize: Appearance.font.pixelSize.normal }
+                    Item { Layout.fillWidth: true }
+                    StyledText {
+                        text: {
+                            const style = Config.options?.appearance?.globalStyle ?? "material"
+                            return style === "material" ? "Clean & Solid" 
+                                 : style === "cards" ? "Rounded Cards"
+                                 : style === "aurora" ? "Glass & Blur"
+                                 : "Terminal Style"
+                        }
+                        color: Appearance.colors.colSubtext
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                    }
+                }
+
+                ConfigSelectionArray {
+                    Layout.fillWidth: true
+                    currentValue: Config.options?.appearance?.globalStyle ?? "material"
+                    onSelected: newValue => {
+                        Config.setNestedValue("appearance.globalStyle", newValue)
+                        Config.setNestedValue("appearance.transparency.enable", newValue === "aurora")
+                    }
+                    options: [
+                        { displayName: "Material", icon: "dashboard", value: "material" },
+                        { displayName: "Cards", icon: "crop_square", value: "cards" },
+                        { displayName: "Aurora", icon: "blur_on", value: "aurora" },
+                        { displayName: "Inir", icon: "terminal", value: "inir" }
+                    ]
+                }
+            }
+        }
+
+        // Wallpaper
+        SettingsGroup {
+            Layout.fillWidth: true
+            Layout.maximumWidth: 520
+            Layout.alignment: Qt.AlignHCenter
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    MaterialSymbol { text: "wallpaper"; iconSize: 20; color: Appearance.colors.colPrimary }
+                    StyledText { text: Translation.tr("Wallpaper & Colors"); font.pixelSize: Appearance.font.pixelSize.normal }
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Theme colors are automatically generated from your wallpaper using Material You")
+                    color: Appearance.colors.colSubtext
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    wrapMode: Text.WordWrap
+                }
+
+                RippleButton {
+                    Layout.fillWidth: true
+                    implicitHeight: 48
+                    buttonRadius: Appearance.rounding.small
+                    colBackground: Appearance.colors.colPrimaryContainer
+                    colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                    onClicked: Quickshell.execDetached([Directories.wallpaperSwitchScriptPath])
+
+                    RowLayout {
+                        anchors.centerIn: parent
+                        spacing: 10
+                        MaterialSymbol { text: "add_photo_alternate"; iconSize: 22; color: Appearance.colors.colOnPrimaryContainer }
+                        StyledText { 
+                            text: Translation.tr("Choose Wallpaper")
+                            color: Appearance.colors.colOnPrimaryContainer
+                            font.pixelSize: Appearance.font.pixelSize.normal
+                        }
+                    }
+                }
+            }
+        }
+
+        Item { Layout.fillHeight: true }
+    }
+
+    component LayoutContent: ColumnLayout {
+        spacing: 16
+
+        GridLayout {
+            Layout.alignment: Qt.AlignHCenter
+            columns: 2
+            columnSpacing: 16
+            rowSpacing: 16
+
+            // Bar position
+            SettingsGroup {
+                Layout.preferredWidth: 240
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    RowLayout {
+                        MaterialSymbol { text: "web_asset"; iconSize: 18; color: Appearance.colors.colPrimary }
+                        StyledText { text: Translation.tr("Bar"); font.pixelSize: Appearance.font.pixelSize.small }
+                    }
+                    ConfigSelectionArray {
+                        Layout.fillWidth: true
+                        currentValue: Config.options?.bar?.bottom ?? false
+                        onSelected: v => Config.setNestedValue("bar.bottom", v)
+                        options: [
+                            { displayName: Translation.tr("Top"), icon: "vertical_align_top", value: false },
+                            { displayName: Translation.tr("Bottom"), icon: "vertical_align_bottom", value: true }
+                        ]
+                    }
+                }
+            }
+
+            // Bar style
+            SettingsGroup {
+                Layout.preferredWidth: 240
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    RowLayout {
+                        MaterialSymbol { text: "rounded_corner"; iconSize: 18; color: Appearance.colors.colPrimary }
+                        StyledText { text: Translation.tr("Bar Style"); font.pixelSize: Appearance.font.pixelSize.small }
+                    }
+                    ConfigSelectionArray {
+                        Layout.fillWidth: true
+                        currentValue: Config.options?.bar?.cornerStyle ?? 0
+                        onSelected: v => Config.setNestedValue("bar.cornerStyle", v)
+                        options: [
+                            { displayName: Translation.tr("Hug"), icon: "line_curve", value: 0 },
+                            { displayName: Translation.tr("Float"), icon: "crop_free", value: 1 },
+                            { displayName: Translation.tr("Full"), icon: "rectangle", value: 2 }
+                        ]
+                    }
+                }
+            }
+
+            // Dock position
+            SettingsGroup {
+                Layout.preferredWidth: 240
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    RowLayout {
+                        MaterialSymbol { text: "dock_to_bottom"; iconSize: 18; color: Appearance.colors.colPrimary }
+                        StyledText { text: Translation.tr("Dock"); font.pixelSize: Appearance.font.pixelSize.small }
+                    }
+                    ConfigSelectionArray {
+                        Layout.fillWidth: true
+                        currentValue: Config.options?.dock?.position ?? "bottom"
+                        onSelected: v => Config.setNestedValue("dock.position", v)
+                        options: [
+                            { displayName: Translation.tr("Bottom"), icon: "arrow_downward", value: "bottom" },
+                            { displayName: Translation.tr("Left"), icon: "arrow_back", value: "left" },
+                            { displayName: Translation.tr("Right"), icon: "arrow_forward", value: "right" }
+                        ]
+                    }
+                }
+            }
+
+            // Panel family
+            SettingsGroup {
+                Layout.preferredWidth: 240
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    RowLayout {
+                        MaterialSymbol { text: "view_quilt"; iconSize: 18; color: Appearance.colors.colPrimary }
+                        StyledText { text: Translation.tr("Panel Style"); font.pixelSize: Appearance.font.pixelSize.small }
+                    }
+                    ConfigSelectionArray {
+                        Layout.fillWidth: true
+                        currentValue: Config.options?.panelFamily ?? "ii"
+                        onSelected: v => Config.setNestedValue("panelFamily", v)
+                        options: [
+                            { displayName: "Material II", icon: "dashboard", value: "ii" },
+                            { displayName: "Waffle", icon: "grid_view", value: "waffle" }
+                        ]
+                    }
+                }
+            }
+        }
+
+        // Additional layout options
+        SettingsGroup {
+            Layout.fillWidth: true
+            Layout.maximumWidth: 500
+            Layout.alignment: Qt.AlignHCenter
+
+            ConfigSwitch {
+                buttonIcon: "visibility"
+                text: Translation.tr("Show bar background")
+                checked: Config.options?.bar?.showBackground ?? false
+                onCheckedChanged: Config.setNestedValue("bar.showBackground", checked)
+            }
+            ConfigSwitch {
+                buttonIcon: "auto_awesome_motion"
+                text: Translation.tr("Bar auto-hide")
+                checked: Config.options?.bar?.autoHide?.enable ?? false
+                onCheckedChanged: Config.setNestedValue("bar.autoHide.enable", checked)
+            }
+        }
+
+        Item { Layout.fillHeight: true }
+    }
+
+    component FeaturesContent: ColumnLayout {
+        spacing: 16
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.maximumWidth: 560
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 16
+
+            // Left column
+            SettingsGroup {
+                Layout.fillWidth: true
+                
+                ConfigSwitch {
+                    buttonIcon: "auto_awesome"
+                    text: Translation.tr("AI Assistant")
+                    checked: (Config.options?.policies?.ai ?? 0) >= 1
+                    onCheckedChanged: Config.setNestedValue("policies.ai", checked ? 1 : 0)
+                }
+                ConfigSwitch {
+                    buttonIcon: "image"
+                    text: Translation.tr("Anime wallpapers")
+                    checked: (Config.options?.policies?.weeb ?? 0) >= 1
+                    onCheckedChanged: Config.setNestedValue("policies.weeb", checked ? 1 : 0)
+                }
+                ConfigSwitch {
+                    buttonIcon: "notifications_active"
+                    text: Translation.tr("Sound effects")
+                    checked: Config.options?.sounds?.notifications ?? false
+                    onCheckedChanged: Config.setNestedValue("sounds.notifications", checked)
+                }
+                ConfigSwitch {
+                    buttonIcon: "sports_esports"
+                    text: Translation.tr("Game mode")
+                    checked: Config.options?.gameMode?.autoDetect ?? true
+                    onCheckedChanged: Config.setNestedValue("gameMode.autoDetect", checked)
+                }
+            }
+
+            // Right column
+            SettingsGroup {
+                Layout.fillWidth: true
+                
+                ConfigSwitch {
+                    buttonIcon: "dock_to_bottom"
+                    text: Translation.tr("Show dock")
+                    checked: Config.options?.dock?.enable ?? true
+                    onCheckedChanged: Config.setNestedValue("dock.enable", checked)
+                }
+                ConfigSwitch {
+                    buttonIcon: "schedule"
+                    text: Translation.tr("Desktop clock")
+                    checked: Config.options?.background?.widgets?.clock?.enable ?? true
+                    onCheckedChanged: Config.setNestedValue("background.widgets.clock.enable", checked)
+                }
+                ConfigSwitch {
+                    buttonIcon: "bolt"
+                    text: Translation.tr("Reduce animations")
+                    checked: Config.options?.performance?.reduceAnimations ?? false
+                    onCheckedChanged: Config.setNestedValue("performance.reduceAnimations", checked)
+                }
+                ConfigSwitch {
+                    buttonIcon: "hearing"
+                    text: Translation.tr("Volume protection")
+                    checked: Config.options?.audio?.protection?.enable ?? true
+                    onCheckedChanged: Config.setNestedValue("audio.protection.enable", checked)
+                }
+            }
+        }
+
+        // Extra options
+        SettingsGroup {
+            Layout.fillWidth: true
+            Layout.maximumWidth: 560
+            Layout.alignment: Qt.AlignHCenter
+
+            ConfigSwitch {
+                buttonIcon: "dark_mode"
+                text: Translation.tr("Night light (auto)")
+                checked: Config.options?.light?.night?.automatic ?? false
+                onCheckedChanged: Config.setNestedValue("light.night.automatic", checked)
+            }
+            ConfigSwitch {
+                buttonIcon: "translate"
+                text: Translation.tr("Sidebar translator")
+                checked: Config.options?.sidebar?.translator?.enable ?? true
+                onCheckedChanged: Config.setNestedValue("sidebar.translator.enable", checked)
+            }
+        }
+
+        Item { Layout.fillHeight: true }
+    }
+
+    component ReadyContent: ColumnLayout {
+        spacing: 24
+
+        Item { Layout.fillHeight: true; Layout.maximumHeight: 30 }
+
+        MaterialShapeWrappedMaterialSymbol {
+            Layout.alignment: Qt.AlignHCenter
+            text: "check_circle"
+            iconSize: 56
+            padding: 18
+            shape: MaterialShape.Shape.Circle
+            color: Appearance.colors.colPrimaryContainer
+            colSymbol: Appearance.colors.colOnPrimaryContainer
+        }
+
+        StyledText {
+            Layout.alignment: Qt.AlignHCenter
+            text: Translation.tr("You're all set!")
+            font.family: Appearance.font.family.title
+            font.pixelSize: Appearance.font.pixelSize.hugeass + 4
+        }
+
+        StyledText {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.maximumWidth: 400
+            horizontalAlignment: Text.AlignHCenter
+            text: Translation.tr("Your desktop is configured and ready to use.\nYou can always change these settings later.")
+            color: Appearance.colors.colSubtext
+            wrapMode: Text.WordWrap
+        }
+
+        // Quick actions
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.topMargin: 16
+            spacing: 12
+
+            RippleButton {
+                implicitWidth: 130; implicitHeight: 42
+                buttonRadius: Appearance.rounding.small
+                colBackground: Appearance.colors.colLayer2
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                onClicked: Quickshell.execDetached(["/usr/bin/qs", "-c", "ii", "ipc", "call", "settings", "open"])
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 8
+                    MaterialSymbol { text: "settings"; iconSize: 18 }
+                    StyledText { text: Translation.tr("Settings"); font.pixelSize: Appearance.font.pixelSize.small }
+                }
+            }
+
+            RippleButton {
+                implicitWidth: 130; implicitHeight: 42
+                buttonRadius: Appearance.rounding.small
+                colBackground: Appearance.colors.colLayer2
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                onClicked: Qt.openUrlExternally("https://github.com/YaLTeR/niri/wiki")
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 8
+                    MaterialSymbol { text: "menu_book"; iconSize: 18 }
+                    StyledText { text: Translation.tr("Niri Wiki"); font.pixelSize: Appearance.font.pixelSize.small }
+                }
+            }
+
+            RippleButton {
+                implicitWidth: 130; implicitHeight: 42
+                buttonRadius: Appearance.rounding.small
+                colBackground: Appearance.colors.colLayer2
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                onClicked: Qt.openUrlExternally("https://github.com/snowarch/inir")
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 8
+                    StyledText { text: "󰊤"; font.family: Appearance.font.family.iconNerd; font.pixelSize: 18 }
+                    StyledText { text: "GitHub"; font.pixelSize: Appearance.font.pixelSize.small }
+                }
+            }
+        }
+
+        Item { Layout.fillHeight: true }
     }
 }

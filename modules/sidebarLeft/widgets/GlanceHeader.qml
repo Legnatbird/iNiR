@@ -164,6 +164,38 @@ Item {
                         }
                     }
                 }
+                
+                // Widget Management Button
+                RippleButton {
+                    id: settingsBtn
+                    implicitWidth: 36
+                    implicitHeight: 36
+                    buttonRadius: Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.full
+                    colBackground: "transparent"
+                    colBackgroundHover: Appearance.inirEverywhere ? Appearance.inir.colLayer1Hover 
+                        : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface : Appearance.colors.colLayer1Hover
+                    colRipple: Appearance.inirEverywhere ? Appearance.inir.colLayer1Active 
+                        : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive : Appearance.colors.colLayer1Active
+                    
+                    onClicked: settingsMenu.toggle()
+
+                    contentItem: Item {
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "tune" // or 'widgets'
+                            iconSize: 18
+                            fill: 0
+                            color: Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer0
+                        }
+                    }
+
+                    StyledToolTip { text: Translation.tr("Manage Widgets") }
+                }
+
+                WidgetSettingsMenu {
+                    id: settingsMenu
+                    anchorItem: settingsBtn
+                }
             }
         }
 

@@ -21,7 +21,9 @@ Scope {
     readonly property real osdWidth: Appearance.sizes.osdWidth
     readonly property real widgetWidth: Appearance.sizes.mediaControlsWidth
     readonly property real widgetHeight: Appearance.sizes.mediaControlsHeight
-    property real popupRounding: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
+    readonly property real dockHeight: Config.options?.dock?.height ?? 60
+    readonly property real dockMargin: Appearance.sizes.elevationMargin + Appearance.sizes.hyprlandGapsOut
+    property real popupRounding: Appearance.inirEverywhere ? Appearance.inir.roundingLarge : Appearance.rounding.large
     property list<real> visualizerPoints: []
 
     property bool hasPlasmaIntegration: false
@@ -94,10 +96,21 @@ Scope {
 
     Loader {
         id: mediaControlsLoader
-        active: GlobalStates.mediaControlsOpen
-        onActiveChanged: {
-            if (!mediaControlsLoader.active && Mpris.players.values.filter(player => isRealPlayer(player)).length === 0) {
-                GlobalStates.mediaControlsOpen = false;
+        active: GlobalStates.mediaControlsOpen || closingTimer.running
+
+        Timer {
+            id: closingTimer
+            interval: Appearance.animationsEnabled ? 350 : 0
+        }
+
+        Connections {
+            target: GlobalStates
+            function onMediaControlsOpenChanged() {
+                if (!GlobalStates.mediaControlsOpen) {
+                    closingTimer.restart()
+                } else {
+                    closingTimer.stop()
+                }
             }
         }
 
@@ -107,10 +120,10 @@ Scope {
 
             exclusionMode: ExclusionMode.Ignore
             exclusiveZone: 0
-            implicitWidth: root.widgetWidth
-            implicitHeight: playerColumnLayout.implicitHeight
             color: "transparent"
             WlrLayershell.namespace: "quickshell:mediaControls"
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.keyboardFocus: GlobalStates.mediaControlsOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
             anchors {
                 top: true
@@ -119,50 +132,71 @@ Scope {
                 right: true
             }
 
-            CompositorFocusGrab {
-                windows: [mediaControlsRoot]
-                active: CompositorService.isHyprland && mediaControlsLoader.active
-                onCleared: () => {
-                    if (!active) {
-                        GlobalStates.mediaControlsOpen = false;
-                    }
-                }
-            }
-
-            MouseArea {
-                id: backdropClickArea
+            // Click outside to close - covers entire screen
+            FocusScope {
+                id: inputScope
                 anchors.fill: parent
-                onClicked: mouse => {
-                    const localPos = mapToItem(cardArea, mouse.x, mouse.y)
-                    if (localPos.x < 0 || localPos.x > cardArea.width
-                            || localPos.y < 0 || localPos.y > cardArea.height) {
-                        GlobalStates.mediaControlsOpen = false;
+                focus: true
+
+                Component.onCompleted: focusTimer.start()
+
+                Timer {
+                    id: focusTimer
+                    interval: 100
+                    repeat: false
+                    onTriggered: {
+                        console.log("MediaControls: Forcing focus")
+                        inputScope.forceActiveFocus()
                     }
                 }
-            }
 
-            Item {
-                id: cardArea
+                Keys.onSpacePressed: {
+                    console.log("MediaControls: Space pressed")
+                    if (root.activePlayer?.canTogglePlaying) {
+                        root.activePlayer.togglePlaying();
+                    }
+                }
 
-                width: root.widgetWidth
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: GlobalStates.mediaControlsOpen = false
+                }
+
+                Item {
+                    id: cardArea
+                    width: root.widgetWidth
                 height: playerColumnLayout.implicitHeight
+                anchors.horizontalCenter: parent.horizontalCenter
+                
+                // Use screen height for reliable off-screen position
+                readonly property real screenH: mediaControlsRoot.screen?.height ?? 1080
+                readonly property real targetY: screenH - height - root.dockHeight - root.dockMargin - 5
+                
+                y: screenH + 50
+                opacity: 0
+                scale: 0.9
+                transformOrigin: Item.Bottom
 
-                x: (Config.options?.bar?.vertical ?? false)
-                    ? ((Config.options?.bar?.bottom ?? false)
-                        ? (mediaControlsRoot.screen.width - Appearance.sizes.barHeight - width)
-                        : Appearance.sizes.barHeight)
-                    : ((mediaControlsRoot.screen.width / 2) - (osdWidth / 2) - widgetWidth)
+                states: State {
+                    name: "visible"
+                    when: GlobalStates.mediaControlsOpen
+                    PropertyChanges {
+                        target: cardArea
+                        y: cardArea.targetY
+                        opacity: 1
+                        scale: 1
+                    }
+                }
 
-                y: (Config.options?.bar?.vertical ?? false)
-                    ? ((mediaControlsRoot.screen.height / 2) - widgetHeight * 1.5)
-                    : ((Config.options?.bar?.bottom ?? false)
-                        ? (mediaControlsRoot.screen.height - Appearance.sizes.barHeight - height)
-                        : Appearance.sizes.barHeight)
+                transitions: Transition {
+                    enabled: Appearance.animationsEnabled
+                    NumberAnimation { properties: "y,opacity,scale"; duration: 350; easing.type: Easing.OutQuint }
+                }
 
                 ColumnLayout {
                     id: playerColumnLayout
                     anchors.fill: parent
-                    spacing: -Appearance.sizes.elevationMargin // Shadow overlap okay
+                    spacing: -Appearance.sizes.elevationMargin
 
                     Repeater {
                         model: ScriptModel {
@@ -170,11 +204,15 @@ Scope {
                         }
                         delegate: PlayerControl {
                             required property MprisPlayer modelData
+                            required property int index
                             player: modelData
                             visualizerPoints: root.visualizerPoints
                             implicitWidth: root.widgetWidth
                             implicitHeight: root.widgetHeight
                             radius: root.popupRounding
+                            // Screen position for aurora glass
+                            screenX: cardArea.x + (mediaControlsRoot.width - cardArea.width) / 2
+                            screenY: cardArea.y + index * (root.widgetHeight - Appearance.sizes.elevationMargin)
                         }
                     }
 
@@ -196,8 +234,10 @@ Scope {
                                  : Appearance.auroraEverywhere ? Appearance.aurora.colPopupSurface
                                  : Appearance.colors.colLayer0
                             radius: Appearance.inirEverywhere ? Appearance.inir.roundingLarge : root.popupRounding
-                            border.width: Appearance.inirEverywhere ? 1 : 0
-                            border.color: Appearance.inirEverywhere ? Appearance.inir.colBorder : "transparent"
+                            border.width: Appearance.inirEverywhere || Appearance.auroraEverywhere ? 1 : 0
+                            border.color: Appearance.inirEverywhere ? Appearance.inir.colBorder 
+                                        : Appearance.auroraEverywhere ? Appearance.aurora.colTooltipBorder
+                                        : "transparent"
                             property real padding: 20
                             implicitWidth: placeholderLayout.implicitWidth + padding * 2
                             implicitHeight: placeholderLayout.implicitHeight + padding * 2
@@ -209,6 +249,7 @@ Scope {
                                 StyledText {
                                     text: Translation.tr("No active player")
                                     font.pixelSize: Appearance.font.pixelSize.large
+                                    color: Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer0
                                 }
                                 StyledText {
                                     color: Appearance.inirEverywhere ? Appearance.inir.colTextSecondary : Appearance.colors.colSubtext
@@ -222,22 +263,23 @@ Scope {
             }
         }
     }
+    }
 
     IpcHandler {
         target: "mediaControls"
 
         function toggle(): void {
-            mediaControlsLoader.active = !mediaControlsLoader.active;
-            if (mediaControlsLoader.active)
+            GlobalStates.mediaControlsOpen = !GlobalStates.mediaControlsOpen;
+            if (GlobalStates.mediaControlsOpen)
                 Notifications.timeoutAll();
         }
 
         function close(): void {
-            mediaControlsLoader.active = false;
+            GlobalStates.mediaControlsOpen = false;
         }
 
         function open(): void {
-            mediaControlsLoader.active = true;
+            GlobalStates.mediaControlsOpen = true;
             Notifications.timeoutAll();
         }
     }
@@ -266,6 +308,16 @@ Scope {
 
                 onPressed: {
                     GlobalStates.mediaControlsOpen = false;
+                }
+            }
+            GlobalShortcut {
+                name: "mediaControlsPlayPause"
+                description: "Toggles play/pause when media controls are open"
+
+                onPressed: {
+                    if (GlobalStates.mediaControlsOpen && activePlayer?.canTogglePlaying) {
+                        activePlayer.togglePlaying();
+                    }
                 }
             }
         }

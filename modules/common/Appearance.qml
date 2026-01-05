@@ -609,8 +609,8 @@ Singleton {
         property real fabShadowRadius: 5
         property real fabHoveredShadowRadius: 7
         property real hyprlandGapsOut: 5
-        property real mediaControlsWidth: 440
-        property real mediaControlsHeight: 160
+        property real mediaControlsWidth: 380
+        property real mediaControlsHeight: 150
         property real notificationPopupWidth: 410
         property real osdWidth: 180
         property real searchWidthCollapsed: 210

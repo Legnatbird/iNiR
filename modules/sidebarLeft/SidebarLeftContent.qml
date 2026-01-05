@@ -46,6 +46,7 @@ Item {
     property bool redditEnabled: Config.options?.sidebar?.reddit?.enable ?? false
     property bool wallhavenEnabled: Config.options.sidebar?.wallhaven?.enable !== false
     property bool widgetsEnabled: Config.options?.sidebar?.widgets?.enable ?? true
+    property bool toolsEnabled: Config.options?.sidebar?.tools?.enable ?? false
     
     property var tabButtonList: [
         ...(root.widgetsEnabled ? [{"icon": "widgets", "name": Translation.tr("Widgets")}] : []),
@@ -54,7 +55,8 @@ Item {
         ...((root.animeEnabled && !root.animeCloset) ? [{"icon": "bookmark_heart", "name": Translation.tr("Anime")}] : []),
         ...(root.animeScheduleEnabled ? [{"icon": "calendar_month", "name": Translation.tr("Schedule")}] : []),
         ...(root.redditEnabled ? [{"icon": "forum", "name": Translation.tr("Reddit")}] : []),
-        ...(root.wallhavenEnabled ? [{"icon": "collections", "name": Translation.tr("Wallhaven")}] : [])
+        ...(root.wallhavenEnabled ? [{"icon": "collections", "name": Translation.tr("Wallhaven")}] : []),
+        ...(root.toolsEnabled ? [{"icon": "build", "name": Translation.tr("Tools")}] : [])
     ]
 
     function focusActiveItem() {
@@ -200,6 +202,7 @@ Item {
                                     case "calendar_month": return animeScheduleComp
                                     case "forum": return redditComp
                                     case "collections": return wallhavenComp
+                                    case "build": return toolsComp
                                     default: return null
                                 }
                             }
@@ -216,6 +219,7 @@ Item {
         Component { id: animeScheduleComp; AnimeScheduleView {} }
         Component { id: redditComp; RedditView {} }
         Component { id: wallhavenComp; WallhavenView {} }
+        Component { id: toolsComp; ToolsView {} }
 
         Keys.onPressed: (event) => {
             if (event.key === Qt.Key_Escape) {

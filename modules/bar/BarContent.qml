@@ -230,9 +230,14 @@ Item { // Bar content region
             anchors.verticalCenter: parent.verticalCenter
             implicitWidth: root.centerSideModuleWidth
             implicitHeight: rightCenterGroupContent.implicitHeight
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
 
-            onPressed: {
-                GlobalStates.sidebarRightOpen = !GlobalStates.sidebarRightOpen;
+            onPressed: event => {
+                if (event.button === Qt.RightButton) {
+                    GlobalStates.controlPanelOpen = !GlobalStates.controlPanelOpen;
+                } else {
+                    GlobalStates.sidebarRightOpen = !GlobalStates.sidebarRightOpen;
+                }
             }
 
             BarGroup {
