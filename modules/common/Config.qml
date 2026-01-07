@@ -826,10 +826,21 @@ Singleton {
                 // YT Music tab - Search and play YouTube music via yt-dlp
                 property JsonObject ytmusic: JsonObject {
                     property bool enable: false
+                    property bool autoConnect: true
                     property string browser: "firefox"
                     property string cookiesPath: ""
+                    property bool shuffleMode: false
+                    property int repeatMode: 0
                     property list<string> recentSearches: []
                     property list<var> queue: []
+                    property list<var> playlists: []
+                    property list<var> liked: []
+                    property string lastLikedSync: ""
+                    property JsonObject profile: JsonObject {
+                        property string name: ""
+                        property string avatar: ""
+                        property string url: ""
+                    }
                     property JsonObject cache: JsonObject {
                         property list<var> playlists: []
                         property list<var> albums: []

@@ -522,14 +522,22 @@
     },
     "ytmusic": {
       "enable": true,
+      "autoConnect": true,
       "browser": "firefox",
       "cookiesPath": "",
       "recentSearches": [],
       "queue": [],
+      "playlists": [],
+      "liked": [],
+      "lastLikedSync": "",
+      "profile": {
+        "name": "",
+        "avatar": "",
+        "url": ""
+      },
       "cache": {
         "playlists": [],
         "albums": [],
-        "artists": [],
         "liked": []
       }
     },
