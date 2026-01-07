@@ -14,20 +14,20 @@ import qs.modules.common.models
 import qs.services
 
 /**
- * YT Music panel - Full-featured YouTube music player.
- * Features: Search, Playlists, Queue, Google Account sync, MPRIS integration.
+ * YT Music panel - Premium Edition
+ * Features: Full Player Overlay, Glassmorphism, Sync Cache, Smooth Animations.
  */
 Item {
     id: root
 
     readonly property bool isAvailable: YtMusic.available
-    readonly property bool hasResults: YtMusic.searchResults.length > 0
     readonly property bool hasQueue: YtMusic.queue.length > 0
     readonly property bool isPlaying: YtMusic.isPlaying
     readonly property bool hasTrack: YtMusic.currentVideoId !== ""
 
-    // Current view: "search" | "playlists" | "queue" | "account"
-    property string currentView: "search"
+    // Views: "home", "search", "library", "account"
+    property string currentView: "home"
+    property bool showFullPlayer: false
 
     function openCreatePlaylist() { createPlaylistDialog.open() }
     function openAddToPlaylist(item) { 
@@ -35,7 +35,7 @@ Item {
         globalAddToPlaylistPopup.open() 
     }
 
-    // Adaptive colors from thumbnail
+    // Adaptive colors
     ColorQuantizer {
         id: colorQuantizer
         source: YtMusic.currentThumbnail
@@ -69,9 +69,8 @@ Item {
     readonly property real radiusSmall: Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.small
     readonly property real radiusNormal: Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
 
-    // Audio visualizer
+    // Visualizer
     property list<real> visualizerPoints: []
-    
     Process {
         id: cavaProc
         running: root.visible && root.isPlaying && GlobalStates.sidebarLeftOpen
@@ -84,2495 +83,852 @@ Item {
         }
     }
 
-    ColumnLayout {
+    // === MAIN LAYOUT ===
+    Item {
         anchors.fill: parent
-        anchors.margins: 10
-        spacing: 8
+        
+        // Content Container
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 10
+            spacing: 10
+            visible: !root.showFullPlayer
+            opacity: visible ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 200 } }
 
-        // === UNAVAILABLE STATE ===
-        Loader {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            active: !root.isAvailable
-            visible: active
-            sourceComponent: ColumnLayout {
-                spacing: 16
-                Item { Layout.fillHeight: true }
-                MaterialSymbol { Layout.alignment: Qt.AlignHCenter; text: "music_off"; iconSize: 56; color: root.colTextSecondary }
-                StyledText { Layout.alignment: Qt.AlignHCenter; text: Translation.tr("yt-dlp not found"); font.pixelSize: Appearance.font.pixelSize.larger; font.weight: Font.Medium; color: root.colText }
-                StyledText { Layout.alignment: Qt.AlignHCenter; Layout.fillWidth: true; Layout.margins: 20; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: Translation.tr("Install yt-dlp and mpv to use YT Music"); font.pixelSize: Appearance.font.pixelSize.small; color: root.colTextSecondary }
-                RippleButton {
-                    Layout.alignment: Qt.AlignHCenter
-                    implicitWidth: 160; implicitHeight: 42
-                    buttonRadius: root.radiusNormal
-                    colBackground: root.colPrimary
-                    onClicked: Qt.openUrlExternally("https://github.com/yt-dlp/yt-dlp#installation")
-                    contentItem: StyledText { anchors.centerIn: parent; text: Translation.tr("Install Guide"); color: Appearance.colors.colOnPrimary; font.weight: Font.Medium }
-                }
-                Item { Layout.fillHeight: true }
-            }
-        }
+            // Header / Nav
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 4
 
-        // === MAIN CONTENT ===
-        Loader {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            active: root.isAvailable
-            visible: active
-            
-            sourceComponent: ColumnLayout {
-                spacing: 8
+                Repeater {
+                    model: [
+                        { id: "home", icon: "home", label: Translation.tr("Home") },
+                        { id: "search", icon: "search", label: Translation.tr("Search") },
+                        { id: "library", icon: "library_music", label: Translation.tr("Library") },
+                        { id: "account", icon: YtMusic.googleConnected ? "account_circle" : "person_off", label: Translation.tr("Account") }
+                    ]
 
-                // Tab bar
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 4
+                    RippleButton {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        implicitHeight: 40
+                        buttonRadius: root.radiusSmall
+                        colBackground: root.currentView === modelData.id ? root.colPrimary : "transparent"
+                        colBackgroundHover: root.currentView === modelData.id ? root.colPrimary : root.colLayer2Hover
+                        onClicked: root.currentView = modelData.id
 
-                    Repeater {
-                        model: [
-                            { id: "search", icon: "search", label: Translation.tr("Search") },
-                            { id: "playlists", icon: "library_music", label: Translation.tr("Playlists") },
-                            { id: "queue", icon: "queue_music", label: Translation.tr("Queue") + (root.hasQueue ? ` (${YtMusic.queue.length})` : "") },
-                            { id: "account", icon: YtMusic.googleConnected ? "account_circle" : "person_off", label: Translation.tr("Account") }
-                        ]
-
-                        RippleButton {
-                            required property var modelData
-                            Layout.fillWidth: true
-                            implicitHeight: 36
-                            buttonRadius: root.radiusSmall
-                            colBackground: root.currentView === modelData.id ? root.colPrimary : "transparent"
-                            colBackgroundHover: root.currentView === modelData.id ? root.colPrimary : root.colLayer2Hover
-                            onClicked: root.currentView = modelData.id
-
-                            contentItem: RowLayout {
-                                anchors.centerIn: parent
-                                spacing: 4
-                                MaterialSymbol {
-                                    text: modelData.icon
-                                    iconSize: 18
-                                    color: root.currentView === modelData.id 
-                                         ? Appearance.colors.colOnPrimary 
-                                         : root.colTextSecondary
-                                }
-                                StyledText {
-                                    text: modelData.label
-                                    font.pixelSize: Appearance.font.pixelSize.smaller
-                                    font.weight: root.currentView === modelData.id ? Font.Medium : Font.Normal
-                                    color: root.currentView === modelData.id 
-                                         ? Appearance.colors.colOnPrimary 
-                                         : root.colText
-                                    visible: parent.width > 60
-                                }
+                        contentItem: ColumnLayout {
+                            anchors.centerIn: parent
+                            spacing: 2
+                            MaterialSymbol {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: modelData.icon
+                                iconSize: 20
+                                color: root.currentView === modelData.id ? Appearance.colors.colOnPrimary : root.colTextSecondary
                             }
                         }
                     }
                 }
+            }
 
-                // === NOW PLAYING CARD ===
-                Loader {
-                    Layout.fillWidth: true
-                    active: root.hasTrack
-                    visible: active
+            // View Stack
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+
+                StackLayout {
+                    anchors.fill: parent
+                    currentIndex: ["home", "search", "library", "account"].indexOf(root.currentView)
                     
-                    sourceComponent: Item {
-                        implicitHeight: playerCard.implicitHeight + 8
+                    HomeView {}
+                    SearchView {}
+                    LibraryView {}
+                    AccountView {}
+                }
+            }
 
-                        StyledRectangularShadow { target: playerCard; visible: !Appearance.auroraEverywhere && !Appearance.inirEverywhere }
+            // Mini Player
+            Loader {
+                Layout.fillWidth: true
+                active: root.hasTrack
+                visible: active
+                
+                sourceComponent: Rectangle {
+                    implicitHeight: 72
+                    radius: root.radiusNormal
+                    color: Appearance.inirEverywhere ? Appearance.inir.colLayer1 
+                         : Appearance.auroraEverywhere ? ColorUtils.transparentize(root.blendedColors?.colLayer0 ?? Appearance.colors.colLayer0, 0.6)
+                         : (root.blendedColors?.colLayer0 ?? Appearance.colors.colLayer0)
+                    border.width: root.borderWidth
+                    border.color: root.colBorder
+                    clip: true
 
+                    // Background Art Blur
+                    Image {
+                        anchors.fill: parent
+                        source: YtMusic.currentThumbnail
+                        fillMode: Image.PreserveAspectCrop
+                        opacity: 0.3
+                        visible: opacity > 0
+                        layer.enabled: Appearance.effectsEnabled
+                        layer.effect: MultiEffect { blurEnabled: true; blur: 0.5; blurMax: 32; saturation: 0.2 }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: root.showFullPlayer = true
+                    }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        spacing: 10
+
+                        // Art
                         Rectangle {
-                            id: playerCard
-                            anchors.centerIn: parent
-                            width: parent.width - 4
-                            implicitHeight: 120
-                            radius: root.radiusNormal
-                            color: Appearance.inirEverywhere ? Appearance.inir.colLayer1 
-                                 : Appearance.auroraEverywhere ? ColorUtils.transparentize(root.blendedColors?.colLayer0 ?? Appearance.colors.colLayer0, 0.7)
-                                 : (root.blendedColors?.colLayer0 ?? Appearance.colors.colLayer0)
-                            border.width: root.borderWidth
-                            border.color: root.colBorder
+                            Layout.preferredWidth: 56
+                            Layout.preferredHeight: 56
+                            radius: root.radiusSmall
+                            color: "black"
                             clip: true
-
-                            layer.enabled: true
-                            layer.effect: GE.OpacityMask { maskSource: Rectangle { width: playerCard.width; height: playerCard.height; radius: playerCard.radius } }
-
-                            // Blurred background
                             Image {
                                 anchors.fill: parent
                                 source: YtMusic.currentThumbnail
                                 fillMode: Image.PreserveAspectCrop
-                                opacity: Appearance.inirEverywhere ? 0 : Appearance.auroraEverywhere ? 0.25 : 0.4
-                                visible: opacity > 0
-                                layer.enabled: Appearance.effectsEnabled
-                                layer.effect: MultiEffect { blurEnabled: true; blur: 0.2; blurMax: 24; saturation: 0.3 }
-                            }
-
-                            // Visualizer
-                            WaveVisualizer {
-                                anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                                height: 25
-                                live: YtMusic.isPlaying
-                                points: root.visualizerPoints
-                                maxVisualizerValue: 1000
-                                smoothing: 2
-                                color: ColorUtils.transparentize(root.colPrimary, 0.5)
-                            }
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                spacing: 10
-
-                                // Cover art
-                                Rectangle {
-                                    Layout.preferredWidth: 100
-                                    Layout.preferredHeight: 100
-                                    radius: root.radiusSmall
-                                    color: "transparent"
-                                    clip: true
-                                    layer.enabled: true
-                                    layer.effect: GE.OpacityMask { maskSource: Rectangle { width: 100; height: 100; radius: root.radiusSmall } }
-
-                                    Image {
-                                        anchors.fill: parent
-                                        source: YtMusic.currentThumbnail
-                                        fillMode: Image.PreserveAspectCrop
-                                        asynchronous: true
-                                    }
-
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        color: "#40000000"
-                                        visible: YtMusic.isPlaying
-                                        MaterialSymbol { anchors.centerIn: parent; text: "graphic_eq"; iconSize: 32; fill: 1; color: "white" }
-                                    }
-
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        color: root.blendedColors?.colLayer1 ?? Appearance.colors.colLayer1
-                                        visible: !YtMusic.currentThumbnail
-                                        MaterialSymbol { 
-                                            anchors.centerIn: parent
-                                            text: YtMusic.loading ? "hourglass_empty" : "music_note"
-                                            iconSize: 32
-                                            color: root.colTextSecondary
-                                            RotationAnimation on rotation { from: 0; to: 360; duration: 1200; loops: Animation.Infinite; running: YtMusic.loading }
-                                        }
-                                    }
-                                }
-
-                                // Info & controls
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-                                    spacing: 4
-
-                                    StyledText {
-                                        Layout.fillWidth: true
-                                        text: YtMusic.currentTitle || Translation.tr("Loading...")
-                                        font.pixelSize: Appearance.font.pixelSize.normal
-                                        font.weight: Font.Medium
-                                        color: root.colText
-                                        elide: Text.ElideRight
-                                    }
-
-                                    StyledText {
-                                        Layout.fillWidth: true
-                                        text: YtMusic.currentArtist
-                                        font.pixelSize: Appearance.font.pixelSize.smaller
-                                        color: root.colTextSecondary
-                                        elide: Text.ElideRight
-                                        visible: text !== ""
-                                    }
-
-                                    Item { Layout.fillHeight: true }
-
-                                    // Progress bar (clickable for seek)
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 6
-
-                                        StyledText {
-                                            text: StringUtils.friendlyTimeForSeconds(YtMusic.currentPosition)
-                                            font.pixelSize: Appearance.font.pixelSize.smallest ?? 10
-                                            font.family: Appearance.font.family.numbers
-                                            color: root.colTextSecondary
-                                        }
-
-                                        Item {
-                                            Layout.fillWidth: true
-                                            Layout.preferredHeight: 16
-                                            
-                                            StyledSlider {
-                                                id: seekSlider
-                                                anchors.fill: parent
-                                                configuration: StyledSlider.Configuration.XS
-                                                from: 0
-                                                to: YtMusic.currentDuration > 0 ? YtMusic.currentDuration : 1
-                                                value: YtMusic.currentPosition
-                                                highlightColor: root.colPrimary
-                                                trackColor: ColorUtils.transparentize(root.colTextSecondary, 0.7)
-                                                handleColor: root.colPrimary
-                                                scrollable: false
-                                                
-                                                property bool userSeeking: false
-                                                
-                                                onPressedChanged: {
-                                                    if (pressed) userSeeking = true
-                                                    else {
-                                                        YtMusic.seek(value)
-                                                        userSeeking = false
-                                                    }
-                                                }
-                                                
-                                                Binding {
-                                                    target: seekSlider
-                                                    property: "value"
-                                                    value: YtMusic.currentPosition
-                                                    when: !seekSlider.userSeeking
-                                                }
-                                            }
-                                        }
-
-                                        StyledText {
-                                            text: StringUtils.friendlyTimeForSeconds(YtMusic.currentDuration)
-                                            font.pixelSize: Appearance.font.pixelSize.smallest ?? 10
-                                            font.family: Appearance.font.family.numbers
-                                            color: root.colTextSecondary
-                                        }
-                                    }
-
-                                    // Controls
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 2
-
-                                        Item { Layout.fillWidth: true }
-
-                                        // Previous / Skip back (disabled for YT)
-                                        RippleButton {
-                                            implicitWidth: 36; implicitHeight: 36
-                                            buttonRadius: Appearance.rounding.full
-                                            colBackground: "transparent"
-                                            colBackgroundHover: root.colSurfaceHover
-                                            enabled: false
-                                            opacity: 0.3
-                                            contentItem: MaterialSymbol { anchors.centerIn: parent; text: "skip_previous"; iconSize: 24; fill: 1; color: root.colText }
-                                        }
-
-                                        // Play/Pause
-                                        RippleButton {
-                                            implicitWidth: 44; implicitHeight: 44
-                                            buttonRadius: Appearance.rounding.full
-                                            colBackground: root.colPrimary
-                                            colBackgroundHover: Appearance.inirEverywhere ? Appearance.inir.colPrimaryHover : Appearance.colors.colPrimaryHover
-                                            onClicked: YtMusic.togglePlaying()
-
-                                            contentItem: MaterialSymbol {
-                                                anchors.centerIn: parent
-                                                text: YtMusic.isPlaying ? "pause" : "play_arrow"
-                                                iconSize: 28
-                                                fill: 1
-                                                color: Appearance.colors.colOnPrimary
-                                            }
-                                        }
-
-                                        // Next in queue
-                                        RippleButton {
-                                            implicitWidth: 36; implicitHeight: 36
-                                            buttonRadius: Appearance.rounding.full
-                                            colBackground: "transparent"
-                                            colBackgroundHover: root.colSurfaceHover
-                                            enabled: root.hasQueue
-                                            opacity: enabled ? 1 : 0.3
-                                            onClicked: YtMusic.playNext()
-                                            contentItem: MaterialSymbol { anchors.centerIn: parent; text: "skip_next"; iconSize: 24; fill: 1; color: root.colText }
-                                            StyledToolTip { text: Translation.tr("Next in queue") }
-                                        }
-
-                                        Item { Layout.fillWidth: true }
-
-                                        // Stop
-                                        RippleButton {
-                                            implicitWidth: 32; implicitHeight: 32
-                                            buttonRadius: Appearance.rounding.full
-                                            colBackground: "transparent"
-                                            colBackgroundHover: root.colSurfaceHover
-                                            onClicked: YtMusic.stop()
-                                            contentItem: MaterialSymbol { anchors.centerIn: parent; text: "stop"; iconSize: 20; fill: 1; color: root.colTextSecondary }
-                                            StyledToolTip { text: Translation.tr("Stop") }
-                                        }
-                                        
-                                        // Volume
-                                        RippleButton {
-                                            id: volumeBtn
-                                            implicitWidth: 32; implicitHeight: 32
-                                            buttonRadius: Appearance.rounding.full
-                                            colBackground: "transparent"
-                                            colBackgroundHover: root.colSurfaceHover
-                                            onClicked: volumePopup.open()
-                                            contentItem: MaterialSymbol { 
-                                                anchors.centerIn: parent
-                                                text: YtMusic.volume < 0.01 ? "volume_off" 
-                                                    : YtMusic.volume < 0.5 ? "volume_down" 
-                                                    : "volume_up"
-                                                iconSize: 20
-                                                fill: 1
-                                                color: root.colTextSecondary 
-                                            }
-                                            
-                                            Popup {
-                                                id: volumePopup
-                                                y: -height - 8
-                                                x: (parent.width - width) / 2
-                                                width: 40
-                                                height: 120
-                                                padding: 8
-                                                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-                                                
-                                                background: Rectangle {
-                                                    color: root.colLayer2
-                                                    radius: root.radiusSmall
-                                                    border.width: root.borderWidth
-                                                    border.color: root.colBorder
-                                                }
-                                                
-                                                contentItem: ColumnLayout {
-                                                    spacing: 4
-                                                    
-                                                    StyledText {
-                                                        Layout.alignment: Qt.AlignHCenter
-                                                        text: Math.round(YtMusic.volume * 100)
-                                                        font.pixelSize: Appearance.font.pixelSize.smallest ?? 10
-                                                        font.family: Appearance.font.family.numbers
-                                                        color: root.colText
-                                                    }
-                                                    
-                                                    StyledSlider {
-                                                        Layout.fillHeight: true
-                                                        Layout.preferredWidth: 24
-                                                        Layout.alignment: Qt.AlignHCenter
-                                                        orientation: Qt.Vertical
-                                                        configuration: StyledSlider.Configuration.S
-                                                        from: 0
-                                                        to: 1
-                                                        value: YtMusic.volume
-                                                        highlightColor: root.colPrimary
-                                                        trackColor: ColorUtils.transparentize(root.colTextSecondary, 0.7)
-                                                        handleColor: root.colPrimary
-                                                        onMoved: YtMusic.setVolume(value)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        
-                                        // Add to playlist
-                                        RippleButton {
-                                            implicitWidth: 32; implicitHeight: 32
-                                            buttonRadius: Appearance.rounding.full
-                                            colBackground: "transparent"
-                                            colBackgroundHover: root.colSurfaceHover
-                                            enabled: true
-                                            onClicked: {
-                                                globalAddToPlaylistPopup.targetItem = {
-                                                    videoId: YtMusic.currentVideoId,
-                                                    title: YtMusic.currentTitle,
-                                                    artist: YtMusic.currentArtist,
-                                                    duration: YtMusic.currentDuration
-                                                }
-                                                globalAddToPlaylistPopup.open()
-                                            }
-                                            contentItem: MaterialSymbol { anchors.centerIn: parent; text: "playlist_add"; iconSize: 20; fill: 1; color: root.colTextSecondary }
-                                            StyledToolTip { text: Translation.tr("Add to playlist") }
-                                        }
-                                    }
-                                }
                             }
                         }
-                    }
-                }
 
-                // Error message
-                Loader {
-                    Layout.fillWidth: true
-                    active: YtMusic.error !== ""
-                    visible: active
-                    sourceComponent: Rectangle {
-                        implicitHeight: 36
-                        radius: root.radiusSmall
-                        color: Appearance.colors.colErrorContainer
-                        RowLayout {
-                            anchors.centerIn: parent; width: parent.width - 16; spacing: 8
-                            MaterialSymbol { text: "error"; iconSize: 18; color: Appearance.colors.colOnErrorContainer }
-                            StyledText { Layout.fillWidth: true; text: YtMusic.error; color: Appearance.colors.colOnErrorContainer; font.pixelSize: Appearance.font.pixelSize.small; elide: Text.ElideRight }
-                            RippleButton { implicitWidth: 24; implicitHeight: 24; buttonRadius: 12; colBackground: "transparent"; onClicked: YtMusic.error = ""; contentItem: MaterialSymbol { anchors.centerIn: parent; text: "close"; iconSize: 16; color: Appearance.colors.colOnErrorContainer } }
+                        // Info
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: YtMusic.currentTitle
+                                font.weight: Font.Bold
+                                elide: Text.ElideRight
+                                color: root.colText
+                            }
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: YtMusic.currentArtist
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: root.colTextSecondary
+                                elide: Text.ElideRight
+                            }
                         }
-                    }
-                }
 
-                // === VIEW CONTENT ===
-                StackLayout {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    currentIndex: ["search", "playlists", "queue", "account"].indexOf(root.currentView)
-
-                    // SEARCH VIEW
-                    SearchView {}
-
-                    // PLAYLISTS VIEW
-                    PlaylistsView {}
-
-                    // QUEUE VIEW
-                    QueueView {}
-
-                    // ACCOUNT VIEW
-                    AccountView {}
-                }
-            }
-        }
-    }
-
-    // === GLOBAL DIALOGS ===
-
-    Popup {
-        id: createPlaylistDialog
-        anchors.centerIn: parent
-        width: 280
-        height: 120
-        modal: true
-        dim: true
-        
-        background: Rectangle { 
-            color: root.colSurface
-            radius: root.radiusNormal
-            border.width: root.borderWidth
-            border.color: root.colBorder 
-        }
-        
-        contentItem: ColumnLayout {
-            spacing: 12
-            
-            StyledText { 
-                text: Translation.tr("New Playlist")
-                font.pixelSize: Appearance.font.pixelSize.normal
-                font.weight: Font.Medium
-                color: root.colText 
-            }
-            
-            TextField { 
-                id: newPlaylistName
-                Layout.fillWidth: true
-                placeholderText: Translation.tr("Playlist name")
-                color: root.colText
-                placeholderTextColor: root.colTextSecondary
-                background: Rectangle { 
-                    color: root.colLayer2
-                    radius: root.radiusSmall 
-                } 
-                onAccepted: createBtn.clicked()
-            }
-            
-            RowLayout { 
-                Layout.fillWidth: true
-                Item { Layout.fillWidth: true }
-                
-                RippleButton { 
-                    id: createBtn
-                    implicitWidth: 80
-                    implicitHeight: 32
-                    buttonRadius: root.radiusSmall
-                    colBackground: root.colPrimary
-                    onClicked: { 
-                        if (newPlaylistName.text.trim()) { 
-                            YtMusic.createPlaylist(newPlaylistName.text)
-                            newPlaylistName.text = ""
-                            createPlaylistDialog.close() 
-                        } 
+                        // Controls
+                        RippleButton {
+                            implicitWidth: 32; implicitHeight: 32
+                            buttonRadius: 16
+                            colBackground: "transparent"
+                            onClicked: YtMusic.togglePlaying()
+                            contentItem: MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: YtMusic.isPlaying ? "pause" : "play_arrow"
+                                iconSize: 24
+                                color: root.colText
+                            }
+                        }
+                        
+                        RippleButton {
+                            implicitWidth: 32; implicitHeight: 32
+                            buttonRadius: 16
+                            colBackground: "transparent"
+                            onClicked: YtMusic.playNext()
+                            contentItem: MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "skip_next"
+                                iconSize: 24
+                                color: root.colText
+                            }
+                        }
                     }
                     
-                    contentItem: StyledText { 
-                        anchors.centerIn: parent
-                        text: Translation.tr("Create")
-                        color: Appearance.colors.colOnPrimary 
-                    } 
-                } 
+                    // Progress Bar (Bottom)
+                    Rectangle {
+                        anchors.bottom: parent.bottom
+                        anchors.left: parent.left
+                        height: 2
+                        width: parent.width * (YtMusic.currentDuration > 0 ? YtMusic.currentPosition / YtMusic.currentDuration : 0)
+                        color: root.colPrimary
+                    }
+                }
             }
         }
-    }
 
-    Popup {
-        id: globalAddToPlaylistPopup
-        anchors.centerIn: parent
-        width: 220
-        height: Math.min(300, Math.max(100, YtMusic.playlists.length * 40 + 50))
-        padding: 12
-        modal: true
-        dim: true
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        
-        property var targetItem: null
-
-        background: Rectangle {
-            color: root.colSurface
-            radius: root.radiusNormal
-            border.width: root.borderWidth
-            border.color: root.colBorder
-        }
-        
-        contentItem: ColumnLayout {
-            spacing: 8
+        // === FULL PLAYER OVERLAY ===
+        Rectangle {
+            id: fullPlayer
+            anchors.fill: parent
+            color: Appearance.inirEverywhere ? Appearance.inir.colLayer0 
+                 : (root.blendedColors?.colLayer0 ?? Appearance.colors.colLayer0)
+            visible: root.showFullPlayer
+            opacity: visible ? 1 : 0
             
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                text: Translation.tr("Add to Playlist")
-                font.weight: Font.Medium
-                color: root.colText
+            // Slide up animation
+            transform: Translate {
+                y: root.showFullPlayer ? 0 : parent.height
+                Behavior on y { NumberAnimation { duration: 300; easing.type: Easing.OutQuart } }
             }
-
-            ListView {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-                model: YtMusic.playlists
-                spacing: 2
-                delegate: RippleButton {
-                    required property var modelData
-                    required property int index
-                    width: ListView.view.width
-                    implicitHeight: 36
-                    buttonRadius: root.radiusSmall
-                    colBackground: "transparent"
-                    colBackgroundHover: root.colLayer2Hover
-                    onClicked: {
-                        if (globalAddToPlaylistPopup.targetItem) {
-                            YtMusic.addToPlaylist(index, globalAddToPlaylistPopup.targetItem)
-                            globalAddToPlaylistPopup.close()
+            
+            // Background Art (Full Blur)
+            Image {
+                anchors.fill: parent
+                source: YtMusic.currentThumbnail
+                fillMode: Image.PreserveAspectCrop
+                opacity: 0.4
+                visible: opacity > 0
+                layer.enabled: Appearance.effectsEnabled
+                layer.effect: MultiEffect { blurEnabled: true; blur: 1.0; blurMax: 64; saturation: 0.4 }
+            }
+            
+            // Content
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 20
+                spacing: 20
+                
+                // Header
+                RowLayout {
+                    Layout.fillWidth: true
+                    RippleButton {
+                        implicitWidth: 40; implicitHeight: 40
+                        buttonRadius: 20
+                        colBackground: "transparent"
+                        colBackgroundHover: ColorUtils.transparentize("white", 0.1)
+                        onClicked: root.showFullPlayer = false
+                        contentItem: MaterialSymbol { anchors.centerIn: parent; text: "keyboard_arrow_down"; iconSize: 28; color: root.colText }
+                    }
+                    Item { Layout.fillWidth: true }
+                    StyledText { text: Translation.tr("Now Playing"); font.weight: Font.Bold; color: root.colTextSecondary }
+                    Item { Layout.fillWidth: true }
+                    RippleButton {
+                        implicitWidth: 40; implicitHeight: 40
+                        buttonRadius: 20
+                        colBackground: "transparent"
+                        colBackgroundHover: ColorUtils.transparentize("white", 0.1)
+                        onClicked: root.openAddToPlaylist({
+                            videoId: YtMusic.currentVideoId,
+                            title: YtMusic.currentTitle,
+                            artist: YtMusic.currentArtist,
+                            duration: YtMusic.currentDuration
+                        })
+                        contentItem: MaterialSymbol { anchors.centerIn: parent; text: "playlist_add"; iconSize: 24; color: root.colText }
+                    }
+                }
+                
+                // Big Art
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: Math.min(parent.width, parent.height)
+                        height: width
+                        radius: root.radiusNormal
+                        color: "black"
+                        clip: true
+                        
+                        StyledRectangularShadow { target: parent; visible: true; opacity: 0.5 }
+                        
+                        Image {
+                            anchors.fill: parent
+                            source: YtMusic.currentThumbnail
+                            fillMode: Image.PreserveAspectCrop
                         }
                     }
-                    contentItem: StyledText {
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        verticalAlignment: Text.AlignVCenter
-                        text: modelData.name ?? ""
+                }
+                
+                // Info
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: YtMusic.currentTitle
+                        font.pixelSize: Appearance.font.pixelSize.large
+                        font.weight: Font.Bold
                         color: root.colText
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: YtMusic.currentArtist
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        color: root.colTextSecondary
+                        horizontalAlignment: Text.AlignHCenter
                         elide: Text.ElideRight
                     }
                 }
-            }
-            
-            RippleButton {
-                Layout.fillWidth: true
-                implicitHeight: 32
-                buttonRadius: root.radiusSmall
-                colBackground: root.colLayer2
-                colBackgroundHover: root.colLayer2Hover
-                onClicked: {
-                    globalAddToPlaylistPopup.close()
-                    createPlaylistDialog.open()
+                
+                // Visualizer
+                WaveVisualizer {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
+                    live: YtMusic.isPlaying
+                    points: root.visualizerPoints
+                    maxVisualizerValue: 1000
+                    smoothing: 2
+                    color: root.colPrimary
                 }
-                contentItem: RowLayout {
-                    anchors.centerIn: parent
+                
+                // Progress
+                ColumnLayout {
+                    Layout.fillWidth: true
                     spacing: 4
-                    MaterialSymbol { text: "add"; iconSize: 18; color: root.colPrimary }
-                    StyledText { text: Translation.tr("New Playlist"); color: root.colPrimary }
+                    
+                    StyledSlider {
+                        Layout.fillWidth: true
+                        from: 0
+                        to: YtMusic.currentDuration > 0 ? YtMusic.currentDuration : 1
+                        value: YtMusic.currentPosition
+                        onMoved: YtMusic.seek(value)
+                        highlightColor: root.colPrimary
+                        handleColor: root.colText
+                    }
+                    
+                    RowLayout {
+                        Layout.fillWidth: true
+                        StyledText { text: StringUtils.friendlyTimeForSeconds(YtMusic.currentPosition); color: root.colTextSecondary; font.pixelSize: 12 }
+                        Item { Layout.fillWidth: true }
+                        StyledText { text: StringUtils.friendlyTimeForSeconds(YtMusic.currentDuration); color: root.colTextSecondary; font.pixelSize: 12 }
+                    }
                 }
+                
+                // Controls
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 20
+                    
+                    Item { Layout.fillWidth: true }
+                    
+                    RippleButton {
+                        implicitWidth: 48; implicitHeight: 48; buttonRadius: 24
+                        colBackground: "transparent"
+                        onClicked: YtMusic.shuffleQueue()
+                        contentItem: MaterialSymbol { anchors.centerIn: parent; text: "shuffle"; iconSize: 24; color: root.colTextSecondary }
+                    }
+                    
+                    RippleButton {
+                        implicitWidth: 56; implicitHeight: 56; buttonRadius: 28
+                        colBackground: "transparent"
+                        enabled: false // Previous not supported well
+                        opacity: 0.5
+                        contentItem: MaterialSymbol { anchors.centerIn: parent; text: "skip_previous"; iconSize: 32; color: root.colText; fill: 1 }
+                    }
+                    
+                    RippleButton {
+                        implicitWidth: 72; implicitHeight: 72; buttonRadius: 36
+                        colBackground: root.colPrimary
+                        onClicked: YtMusic.togglePlaying()
+                        contentItem: MaterialSymbol { 
+                            anchors.centerIn: parent
+                            text: YtMusic.isPlaying ? "pause" : "play_arrow"
+                            iconSize: 40
+                            color: Appearance.colors.colOnPrimary
+                            fill: 1
+                        }
+                    }
+                    
+                    RippleButton {
+                        implicitWidth: 56; implicitHeight: 56; buttonRadius: 28
+                        colBackground: "transparent"
+                        onClicked: YtMusic.playNext()
+                        contentItem: MaterialSymbol { anchors.centerIn: parent; text: "skip_next"; iconSize: 32; color: root.colText; fill: 1 }
+                    }
+                    
+                    RippleButton {
+                        implicitWidth: 48; implicitHeight: 48; buttonRadius: 24
+                        colBackground: "transparent"
+                        onClicked: root.currentView = "queue"; // Show queue
+                        contentItem: MaterialSymbol { anchors.centerIn: parent; text: "queue_music"; iconSize: 24; color: root.colTextSecondary }
+                    }
+                    
+                    Item { Layout.fillWidth: true }
+                }
+                
+                Item { Layout.preferredHeight: 20 }
             }
         }
     }
 
     // === SUB-COMPONENTS ===
 
-    component SearchView: ColumnLayout {
-        spacing: 8
+    component HomeView: ColumnLayout {
+        spacing: 12
 
-        // Search bar
-        Rectangle {
+        // Welcome / Status
+        RowLayout {
             Layout.fillWidth: true
-            implicitHeight: 42
-            radius: Appearance.inirEverywhere ? root.radiusSmall : Appearance.rounding.full
-            color: root.colLayer2
-            border.width: root.borderWidth
-            border.color: root.colBorder
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 14
-                anchors.rightMargin: 10
-                spacing: 10
-                
-                MaterialSymbol { 
-                    text: YtMusic.searching ? "hourglass_empty" : "search"
-                    iconSize: 20
-                    color: root.colTextSecondary
-                    RotationAnimation on rotation { 
-                        from: 0
-                        to: 360
-                        duration: 1000
-                        loops: Animation.Infinite
-                        running: YtMusic.searching 
-                    } 
-                }
-                
-                TextField {
-                    id: searchField
-                    Layout.fillWidth: true
-                    placeholderText: Translation.tr("Search YouTube Music...")
-                    color: root.colText
-                    placeholderTextColor: root.colTextSecondary
-                    font.pixelSize: Appearance.font.pixelSize.normal
-                    font.family: Appearance.font.family.main
-                    background: Item {}
-                    selectByMouse: true
-                    onAccepted: { if (text.trim()) YtMusic.search(text) }
-                    Keys.onEscapePressed: { text = ""; focus = false }
-                }
-                
-                RippleButton {
-                    implicitWidth: 28
-                    implicitHeight: 28
-                    visible: searchField.text.length > 0
-                    buttonRadius: 14
-                    colBackground: "transparent"
-                    colBackgroundHover: root.colLayer2Hover
-                    onClicked: { searchField.text = ""; searchField.forceActiveFocus() }
-                    
-                    contentItem: MaterialSymbol { 
-                        anchors.centerIn: parent
-                        text: "close"
-                        iconSize: 18
-                        color: root.colTextSecondary 
-                    }
-                }
-            }
-        }
-
-        // Results / Recent / Empty
-        Item {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-
-            // Empty state
-            ColumnLayout {
-                anchors.centerIn: parent
-                width: parent.width
-                spacing: 12
-                visible: !root.hasResults && !YtMusic.searching && YtMusic.recentSearches.length === 0
-                
-                MaterialSymbol { 
-                    Layout.alignment: Qt.AlignHCenter
-                    text: "library_music"
-                    iconSize: 56
-                    color: root.colTextSecondary
-                    opacity: 0.5 
-                }
-                
-                StyledText { 
-                    Layout.alignment: Qt.AlignHCenter
-                    text: Translation.tr("Search for music")
-                    font.pixelSize: Appearance.font.pixelSize.large
-                    color: root.colTextSecondary 
-                }
-            }
-
-            // Recent searches
-            ColumnLayout {
-                anchors.fill: parent
-                spacing: 6
-                visible: !root.hasResults && !YtMusic.searching && YtMusic.recentSearches.length > 0
-                
-                RowLayout {
-                    Layout.fillWidth: true
-                    StyledText { 
-                        text: Translation.tr("Recent")
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.weight: Font.Medium
-                        color: root.colTextSecondary 
-                    }
-                    Item { Layout.fillWidth: true }
-                    
-                    RippleButton { 
-                        implicitWidth: 24
-                        implicitHeight: 24
-                        buttonRadius: 12
-                        colBackground: "transparent"
-                        colBackgroundHover: root.colLayer2Hover
-                        onClicked: YtMusic.clearRecentSearches()
-                        
-                        contentItem: MaterialSymbol { 
-                            anchors.centerIn: parent
-                            text: "delete_sweep"
-                            iconSize: 16
-                            color: root.colTextSecondary 
-                        }
-                        
-                        StyledToolTip { text: Translation.tr("Clear") } 
-                    }
-                }
-                
-                ListView {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    clip: true
-                    model: YtMusic.recentSearches
-                    spacing: 2
-                    delegate: RippleButton {
-                        required property string modelData
-                        width: ListView.view.width
-                        implicitHeight: 36
-                        buttonRadius: root.radiusSmall
-                        colBackground: "transparent"
-                        colBackgroundHover: root.colSurfaceHover
-                        onClicked: { searchField.text = modelData; YtMusic.search(modelData) }
-                        
-                        contentItem: RowLayout { 
-                            anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            spacing: 8
-                            
-                            MaterialSymbol { 
-                                text: "history"
-                                iconSize: 18
-                                color: root.colTextSecondary 
-                            }
-                            
-                            StyledText { 
-                                Layout.fillWidth: true
-                                text: modelData
-                                color: root.colText
-                                elide: Text.ElideRight 
-                            } 
-                        }
-                    }
-                }
-            }
-
-            // Results
-            ListView {
-                anchors.fill: parent
-                visible: root.hasResults || YtMusic.searching
+            spacing: 10
+            
+            Rectangle {
+                Layout.preferredWidth: 40
+                Layout.preferredHeight: 40
+                radius: 20
+                color: root.colLayer2
                 clip: true
-                model: YtMusic.searchResults
-                spacing: 4
                 
-                header: Loader { 
-                    width: parent.width
-                    active: YtMusic.searching
-                    height: active ? 40 : 0
-                    
-                    sourceComponent: RowLayout { 
-                        spacing: 8
-                        Item { Layout.fillWidth: true }
-                        BusyIndicator { implicitWidth: 24; implicitHeight: 24; running: true }
-                        StyledText { text: Translation.tr("Searching..."); color: root.colTextSecondary }
-                        Item { Layout.fillWidth: true } 
-                    } 
-                }
-                
-                delegate: ResultItem {}
-            }
-        }
-    }
-
-    component ResultItem: Item {
-        id: resultItem
-        required property var modelData
-        required property int index
-        
-        readonly property var itemData: modelData ?? {}
-        
-        width: ListView.view?.width ?? 200
-        implicitHeight: modelData ? 64 : 0
-        visible: modelData !== null && modelData !== undefined
-        
-        RippleButton {
-            anchors.fill: parent
-            visible: resultItem.visible
-            buttonRadius: root.radiusSmall
-            colBackground: "transparent"
-            colBackgroundHover: root.colSurfaceHover
-            onClicked: if (resultItem.modelData) YtMusic.playFromSearch(resultItem.index)
-
-            contentItem: RowLayout {
-                anchors.fill: parent
-                anchors.margins: 6
-                spacing: 10
-                
-                Rectangle {
-                    Layout.preferredWidth: 52
-                    Layout.preferredHeight: 52
-                    radius: root.radiusSmall
-                    color: root.colLayer2
-                    clip: true
-                    
-                    Image { 
-                        anchors.fill: parent
-                        source: resultItem.itemData?.thumbnail ?? ""
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        cache: true 
-                    }
-                    
-                    MaterialSymbol { 
-                        anchors.centerIn: parent
-                        visible: parent.children[0].status !== Image.Ready
-                        text: "music_note"
-                        iconSize: 22
-                        color: root.colTextSecondary 
-                    }
-                    
-                    Rectangle { 
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        anchors.margins: 3
-                        width: durText.implicitWidth + 6
-                        height: 14
-                        radius: 3
-                        color: "#CC000000"
-                        visible: !!resultItem.itemData && ((resultItem.itemData?.duration ?? 0) > 0)
-                        
-                        StyledText { 
-                            id: durText
-                            anchors.centerIn: parent
-                            text: {
-                                const dur = resultItem.itemData?.duration
-                                return StringUtils.friendlyTimeForSeconds(dur ?? 0)
-                            }
-                            font.pixelSize: Appearance.font.pixelSize.smallest ?? 10
-                            font.family: Appearance.font.family.numbers
-                            color: "white" 
-                        } 
-                    }
-                }
-                
-                ColumnLayout { 
-                    Layout.fillWidth: true
-                    spacing: 2
-                    
-                    StyledText { 
-                        Layout.fillWidth: true
-                        text: resultItem.itemData?.title ?? ""
-                        font.pixelSize: Appearance.font.pixelSize.normal
-                        font.weight: Font.Medium
-                        color: root.colText
-                        elide: Text.ElideRight 
-                    }
-                    
-                    StyledText { 
-                        Layout.fillWidth: true
-                        text: resultItem.itemData?.artist ?? ""
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: root.colTextSecondary
-                        elide: Text.ElideRight
-                        visible: text !== "" 
-                    } 
-                }
-                
-                RippleButton { 
-                    implicitWidth: 32
-                    implicitHeight: 32
-                    buttonRadius: 16
-                    colBackground: "transparent"
-                    colBackgroundHover: root.colLayer2Hover
-                    onClicked: if (resultItem.modelData) root.openAddToPlaylist(resultItem.modelData)
-                    
-                    contentItem: MaterialSymbol { 
-                        anchors.centerIn: parent
-                        text: "playlist_add"
-                        iconSize: 20
-                        color: root.colTextSecondary 
-                    }
-                    
-                    StyledToolTip { text: Translation.tr("Add to playlist") } 
-                }
-
-                RippleButton { 
-                    implicitWidth: 32
-                    implicitHeight: 32
-                    buttonRadius: 16
-                    colBackground: "transparent"
-                    colBackgroundHover: root.colLayer2Hover
-                    onClicked: if (resultItem.modelData) YtMusic.addToQueue(resultItem.modelData)
-                    
-                    contentItem: MaterialSymbol { 
-                        anchors.centerIn: parent
-                        text: "queue_music"
-                        iconSize: 20
-                        color: root.colTextSecondary 
-                    }
-                    
-                    StyledToolTip { text: Translation.tr("Add to queue") } 
-                }
-            }
-        }
-    }
-
-    component PlaylistsView: ColumnLayout {
-        spacing: 8
-        
-        property int expandedPlaylist: -1  // Index of expanded playlist, -1 = none
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-            
-            // Back button when viewing playlist
-            RippleButton {
-                visible: expandedPlaylist >= 0
-                implicitWidth: 32
-                implicitHeight: 32
-                buttonRadius: 16
-                colBackground: "transparent"
-                colBackgroundHover: root.colLayer2Hover
-                onClicked: expandedPlaylist = -1
-                
-                contentItem: MaterialSymbol { 
+                MaterialSymbol {
                     anchors.centerIn: parent
-                    text: "arrow_back"
-                    iconSize: 20
-                    color: root.colText 
-                }
-            }
-            
-            StyledText { 
-                text: expandedPlaylist >= 0 
-                    ? (YtMusic.playlists[expandedPlaylist]?.name ?? Translation.tr("Playlist"))
-                    : Translation.tr("Your Playlists")
-                font.pixelSize: Appearance.font.pixelSize.normal
-                font.weight: Font.Medium
-                color: root.colText 
-            }
-            
-            Item { Layout.fillWidth: true }
-            
-            // Play all (when viewing playlist)
-            RippleButton {
-                visible: expandedPlaylist >= 0 && (YtMusic.playlists[expandedPlaylist]?.items?.length ?? 0) > 0
-                implicitWidth: 32
-                implicitHeight: 32
-                buttonRadius: 16
-                colBackground: root.colPrimary
-                onClicked: YtMusic.playPlaylist(expandedPlaylist, false)
-                
-                contentItem: MaterialSymbol { 
-                    anchors.centerIn: parent
-                    text: "play_arrow"
-                    iconSize: 20
-                    color: Appearance.colors.colOnPrimary 
-                }
-                
-                StyledToolTip { text: Translation.tr("Play all") }
-            }
-            
-            // Shuffle (when viewing playlist)
-            RippleButton {
-                visible: expandedPlaylist >= 0 && (YtMusic.playlists[expandedPlaylist]?.items?.length ?? 0) > 1
-                implicitWidth: 32
-                implicitHeight: 32
-                buttonRadius: 16
-                colBackground: "transparent"
-                colBackgroundHover: root.colLayer2Hover
-                onClicked: YtMusic.playPlaylist(expandedPlaylist, true)
-                
-                contentItem: MaterialSymbol { 
-                    anchors.centerIn: parent
-                    text: "shuffle"
-                    iconSize: 20
-                    color: root.colTextSecondary 
-                }
-                
-                StyledToolTip { text: Translation.tr("Shuffle") }
-            }
-            
-            // New playlist button (when viewing list)
-            RippleButton {
-                visible: expandedPlaylist < 0
-                implicitWidth: 32
-                implicitHeight: 32
-                buttonRadius: 16
-                colBackground: root.colPrimary
-                onClicked: root.openCreatePlaylist()
-                
-                contentItem: MaterialSymbol { 
-                    anchors.centerIn: parent
-                    text: "add"
-                    iconSize: 20
-                    color: Appearance.colors.colOnPrimary 
-                }
-                
-                StyledToolTip { text: Translation.tr("New playlist") }
-            }
-        }
-
-        // Playlists list (when not expanded)
-        ListView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            visible: expandedPlaylist < 0
-            clip: true
-            model: YtMusic.playlists
-            spacing: 4
-            
-            delegate: RippleButton {
-                required property var modelData
-                required property int index
-                width: ListView.view.width
-                implicitHeight: 56
-                buttonRadius: root.radiusSmall
-                colBackground: "transparent"
-                colBackgroundHover: root.colSurfaceHover
-                onClicked: expandedPlaylist = index
-
-                contentItem: RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 10
-                    
-                    Rectangle { 
-                        Layout.preferredWidth: 40
-                        Layout.preferredHeight: 40
-                        radius: root.radiusSmall
-                        color: root.colLayer2
-                        
-                        MaterialSymbol { 
-                            anchors.centerIn: parent
-                            text: "queue_music"
-                            iconSize: 22
-                            color: root.colPrimary 
-                        } 
-                    }
-                    
-                    ColumnLayout { 
-                        Layout.fillWidth: true
-                        spacing: 2
-                        
-                        StyledText { 
-                            Layout.fillWidth: true
-                            text: modelData.name ?? ""
-                            font.pixelSize: Appearance.font.pixelSize.normal
-                            font.weight: Font.Medium
-                            color: root.colText
-                            elide: Text.ElideRight 
-                        }
-                        
-                        StyledText { 
-                            text: Translation.tr("%1 songs").arg(modelData.items?.length ?? 0)
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: root.colTextSecondary 
-                        } 
-                    }
-                    
-                    MaterialSymbol { 
-                        text: "chevron_right"
-                        iconSize: 20
-                        color: root.colTextSecondary 
-                    }
-                }
-            }
-
-            // Empty state
-            ColumnLayout {
-                anchors.centerIn: parent
-                visible: YtMusic.playlists.length === 0
-                spacing: 12
-                
-                MaterialSymbol { 
-                    Layout.alignment: Qt.AlignHCenter
-                    text: "playlist_add"
-                    iconSize: 48
+                    text: "face"
+                    iconSize: 24
                     color: root.colTextSecondary
-                    opacity: 0.5 
-                }
-                
-                StyledText { 
-                    Layout.alignment: Qt.AlignHCenter
-                    text: Translation.tr("No playlists yet")
-                    color: root.colTextSecondary 
                 }
             }
-        }
-        
-        // Playlist content (when expanded)
-        ListView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            visible: expandedPlaylist >= 0
-            clip: true
-            model: expandedPlaylist >= 0 ? (YtMusic.playlists[expandedPlaylist]?.items ?? []) : []
-            spacing: 4
-            
-            delegate: RippleButton {
-                required property var modelData
-                required property int index
-                width: ListView.view.width
-                implicitHeight: 56
-                buttonRadius: root.radiusSmall
-                colBackground: "transparent"
-                colBackgroundHover: root.colSurfaceHover
-                onClicked: YtMusic.play(modelData)
-
-                contentItem: RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 6
-                    spacing: 8
-                    
-                    StyledText { 
-                        text: (index + 1).toString()
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.family: Appearance.font.family.numbers
-                        color: root.colTextSecondary
-                        Layout.preferredWidth: 24 
-                    }
-                    
-                    Rectangle { 
-                        Layout.preferredWidth: 44
-                        Layout.preferredHeight: 44
-                        radius: root.radiusSmall
-                        color: root.colLayer2
-                        clip: true
-                        
-                        Image { 
-                            anchors.fill: parent
-                            source: modelData.thumbnail ?? ""
-                            fillMode: Image.PreserveAspectCrop
-                            asynchronous: true 
-                        }
-                        
-                        MaterialSymbol { 
-                            anchors.centerIn: parent
-                            visible: parent.children[0].status !== Image.Ready
-                            text: "music_note"
-                            iconSize: 20
-                            color: root.colTextSecondary 
-                        }
-                    }
-                    
-                    ColumnLayout { 
-                        Layout.fillWidth: true
-                        spacing: 2
-                        
-                        StyledText { 
-                            Layout.fillWidth: true
-                            text: modelData.title ?? ""
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            font.weight: Font.Medium
-                            color: root.colText
-                            elide: Text.ElideRight 
-                        }
-                        
-                        StyledText { 
-                            Layout.fillWidth: true
-                            text: modelData.artist ?? ""
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: root.colTextSecondary
-                            elide: Text.ElideRight
-                            visible: text !== "" 
-                        } 
-                    }
-                    
-                    // Duration
-                    StyledText { 
-                        text: StringUtils.friendlyTimeForSeconds(modelData.duration ?? 0)
-                        font.pixelSize: Appearance.font.pixelSize.smallest ?? 10
-                        font.family: Appearance.font.family.numbers
-                        color: root.colTextSecondary
-                        visible: (modelData.duration ?? 0) > 0
-                    }
-                    
-                    // Remove from playlist
-                    RippleButton { 
-                        implicitWidth: 28
-                        implicitHeight: 28
-                        buttonRadius: 14
-                        colBackground: "transparent"
-                        colBackgroundHover: root.colLayer2Hover
-                        onClicked: YtMusic.removeFromPlaylist(expandedPlaylist, index)
-                        
-                        contentItem: MaterialSymbol { 
-                            anchors.centerIn: parent
-                            text: "close"
-                            iconSize: 18
-                            color: root.colTextSecondary 
-                        }
-                        
-                        StyledToolTip { text: Translation.tr("Remove") }
-                    }
-                }
-            }
-            
-            // Empty playlist
-            ColumnLayout {
-                anchors.centerIn: parent
-                visible: expandedPlaylist >= 0 && (YtMusic.playlists[expandedPlaylist]?.items?.length ?? 0) === 0
-                spacing: 12
-                
-                MaterialSymbol { 
-                    Layout.alignment: Qt.AlignHCenter
-                    text: "music_off"
-                    iconSize: 48
-                    color: root.colTextSecondary
-                    opacity: 0.5 
-                }
-                
-                StyledText { 
-                    Layout.alignment: Qt.AlignHCenter
-                    text: Translation.tr("Playlist is empty")
-                    color: root.colTextSecondary 
-                }
-                
-                StyledText { 
-                    Layout.alignment: Qt.AlignHCenter
-                    text: Translation.tr("Search for songs and add them here")
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: root.colTextSecondary 
-                }
-            }
-        }
-        
-        // Delete playlist button (when viewing playlist)
-        RippleButton {
-            Layout.fillWidth: true
-            visible: expandedPlaylist >= 0
-            implicitHeight: 36
-            buttonRadius: root.radiusSmall
-            colBackground: "transparent"
-            colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colError, 0.85)
-            onClicked: {
-                YtMusic.deletePlaylist(expandedPlaylist)
-                expandedPlaylist = -1
-            }
-            
-            contentItem: RowLayout {
-                anchors.centerIn: parent
-                spacing: 8
-                MaterialSymbol { text: "delete"; iconSize: 18; color: Appearance.colors.colError }
-                StyledText { text: Translation.tr("Delete playlist"); color: Appearance.colors.colError }
-            }
-        }
-    }
-
-    component QueueView: ColumnLayout {
-        spacing: 8
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-            
-            StyledText { 
-                text: Translation.tr("Queue")
-                font.pixelSize: Appearance.font.pixelSize.normal
-                font.weight: Font.Medium
-                color: root.colText 
-            }
-            
-            StyledText { 
-                text: "(" + YtMusic.queue.length + ")"
-                font.pixelSize: Appearance.font.pixelSize.small
-                color: root.colTextSecondary
-                visible: root.hasQueue 
-            }
-            
-            Item { Layout.fillWidth: true }
-            
-            // Shuffle queue
-            RippleButton { 
-                visible: root.hasQueue && YtMusic.queue.length > 1
-                implicitWidth: 28
-                implicitHeight: 28
-                buttonRadius: 14
-                colBackground: "transparent"
-                colBackgroundHover: root.colLayer2Hover
-                onClicked: YtMusic.shuffleQueue()
-                
-                contentItem: MaterialSymbol { 
-                    anchors.centerIn: parent
-                    text: "shuffle"
-                    iconSize: 18
-                    color: root.colTextSecondary 
-                }
-                
-                StyledToolTip { text: Translation.tr("Shuffle") } 
-            }
-            
-            RippleButton { 
-                visible: root.hasQueue
-                implicitWidth: 80
-                implicitHeight: 28
-                buttonRadius: root.radiusSmall
-                colBackground: root.colPrimary
-                onClicked: YtMusic.playQueue()
-                
-                contentItem: StyledText { 
-                    anchors.centerIn: parent
-                    text: Translation.tr("Play")
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.colors.colOnPrimary 
-                } 
-            }
-            
-            RippleButton { 
-                visible: root.hasQueue
-                implicitWidth: 28
-                implicitHeight: 28
-                buttonRadius: 14
-                colBackground: "transparent"
-                colBackgroundHover: root.colLayer2Hover
-                onClicked: YtMusic.clearQueue()
-                
-                contentItem: MaterialSymbol { 
-                    anchors.centerIn: parent
-                    text: "delete_sweep"
-                    iconSize: 18
-                    color: root.colTextSecondary 
-                }
-                
-                StyledToolTip { text: Translation.tr("Clear") } 
-            }
-        }
-
-        ListView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            clip: true
-            model: YtMusic.queue
-            spacing: 4
-            
-            delegate: RippleButton {
-                required property var modelData
-                required property int index
-                width: ListView.view.width
-                implicitHeight: 56
-                buttonRadius: root.radiusSmall
-                colBackground: "transparent"
-                colBackgroundHover: root.colSurfaceHover
-                onClicked: { /* Play this item and remove previous */ }
-
-                contentItem: RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 6
-                    spacing: 8
-                    
-                    StyledText { 
-                        text: (index + 1).toString()
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.family: Appearance.font.family.numbers
-                        color: root.colTextSecondary
-                        Layout.preferredWidth: 20 
-                    }
-                    
-                    Rectangle { 
-                        Layout.preferredWidth: 44
-                        Layout.preferredHeight: 44
-                        radius: root.radiusSmall
-                        color: root.colLayer2
-                        clip: true
-                        
-                        Image { 
-                            anchors.fill: parent
-                            source: modelData.thumbnail ?? ""
-                            fillMode: Image.PreserveAspectCrop
-                            asynchronous: true 
-                        } 
-                    }
-                    
-                    ColumnLayout { 
-                        Layout.fillWidth: true
-                        spacing: 2
-                        
-                        StyledText { 
-                            Layout.fillWidth: true
-                            text: modelData.title ?? ""
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            font.weight: Font.Medium
-                            color: root.colText
-                            elide: Text.ElideRight 
-                        }
-                        
-                        StyledText { 
-                            Layout.fillWidth: true
-                            text: modelData.artist ?? ""
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: root.colTextSecondary
-                            elide: Text.ElideRight
-                            visible: text !== "" 
-                        } 
-                    }
-                    
-                    RippleButton { 
-                        implicitWidth: 28
-                        implicitHeight: 28
-                        buttonRadius: 14
-                        colBackground: "transparent"
-                        colBackgroundHover: root.colLayer2Hover
-                        onClicked: YtMusic.removeFromQueue(index)
-                        
-                        contentItem: MaterialSymbol { 
-                            anchors.centerIn: parent
-                            text: "close"
-                            iconSize: 18
-                            color: root.colTextSecondary 
-                        } 
-                    }
-                }
-            }
-
-            ColumnLayout { 
-                anchors.centerIn: parent
-                visible: !root.hasQueue
-                spacing: 12
-                
-                MaterialSymbol { 
-                    Layout.alignment: Qt.AlignHCenter
-                    text: "queue_music"
-                    iconSize: 48
-                    color: root.colTextSecondary
-                    opacity: 0.5 
-                }
-                
-                StyledText { 
-                    Layout.alignment: Qt.AlignHCenter
-                    text: Translation.tr("Queue is empty")
-                    color: root.colTextSecondary 
-                } 
-            }
-        }
-    }
-
-    component AccountView: ColumnLayout {
-        spacing: 10
-
-        // === HOW IT WORKS ===
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: howItWorksContent.implicitHeight + 20
-            radius: root.radiusSmall
-            color: ColorUtils.transparentize(Appearance.colors.colTertiaryContainer, 0.5)
             
             ColumnLayout {
-                id: howItWorksContent
-                anchors.fill: parent
-                anchors.margins: 10
-                spacing: 8
-                
-                RowLayout {
-                    spacing: 8
-                    MaterialSymbol { 
-                        text: "info"
-                        iconSize: 18
-                        color: Appearance.colors.colOnTertiaryContainer
-                    }
-                    StyledText { 
-                        Layout.fillWidth: true
-                        text: Translation.tr("How it works")
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.weight: Font.Medium
-                        color: Appearance.colors.colOnTertiaryContainer
-                    }
-                }
-                
+                spacing: 0
                 StyledText {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: 26
-                    text: Translation.tr("YT Music reads cookies from your browser. Log in to music.youtube.com in your browser, then select it here. No passwords are stored.")
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.colors.colOnTertiaryContainer
-                    opacity: 0.9
-                    wrapMode: Text.WordWrap
+                    text: Translation.tr("Welcome back")
+                    font.weight: Font.Bold
+                    color: root.colText
                 }
+                StyledText {
+                    text: YtMusic.googleConnected ? Translation.tr("Connected") : Translation.tr("Guest")
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: root.colTextSecondary
+                }
+            }
+            
+            Item { Layout.fillWidth: true }
+            
+            RippleButton {
+                implicitWidth: 36; implicitHeight: 36
+                buttonRadius: 18
+                colBackground: root.colLayer2
+                onClicked: YtMusic.fetchLibrary()
+                contentItem: MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "refresh"
+                    iconSize: 20
+                    color: root.colText
+                    RotationAnimation on rotation {
+                        from: 0; to: 360; duration: 1000; loops: Animation.Infinite; running: YtMusic.libraryLoading
+                    }
+                }
+            }
+        }
+
+        // Quick Mixes (Hardcoded useful links)
+        StyledText { text: Translation.tr("Quick Mixes"); font.weight: Font.Bold; color: root.colText }
+        
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+            
+            Repeater {
+                model: [
+                    { name: "Supermix", icon: "auto_awesome", url: "https://music.youtube.com/playlist?list=RDTMAK5uy_kset8DisdE7LSD4VsHj8J-c_xd_lzLE" },
+                    { name: "Discover", icon: "explore", url: "https://music.youtube.com/playlist?list=RDTMAK5uy_n41zQj7g_k_1-2-3-4-5" } // Generic discovery
+                ]
                 
-                // Quick action: Open YouTube Music
                 RippleButton {
                     Layout.fillWidth: true
-                    Layout.topMargin: 4
-                    implicitHeight: 36
+                    implicitHeight: 50
                     buttonRadius: root.radiusSmall
-                    colBackground: Appearance.colors.colTertiaryContainer
-                    colBackgroundHover: Qt.darker(Appearance.colors.colTertiaryContainer, 1.1)
-                    onClicked: YtMusic.openYtMusicInBrowser()
+                    colBackground: root.colLayer2
+                    colBackgroundHover: root.colLayer2Hover
+                    onClicked: YtMusic.importYtMusicPlaylist(modelData.url)
                     
                     contentItem: RowLayout {
                         anchors.centerIn: parent
                         spacing: 8
-                        MaterialSymbol { 
-                            text: "open_in_new"
-                            iconSize: 18
-                            color: Appearance.colors.colOnTertiaryContainer
-                        }
-                        StyledText { 
-                            text: Translation.tr("Open YouTube Music to log in")
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: Appearance.colors.colOnTertiaryContainer
-                        }
+                        MaterialSymbol { text: modelData.icon; color: root.colPrimary }
+                        StyledText { text: modelData.name; font.weight: Font.Medium; color: root.colText }
                     }
                 }
             }
         }
 
-        // === ERROR MESSAGE ===
-        Loader {
+        // Liked Songs Quick Access
+        RippleButton {
             Layout.fillWidth: true
-            active: YtMusic.googleError !== ""
-            visible: active
-            
-            sourceComponent: Rectangle {
-                implicitHeight: errorContent.implicitHeight + 16
-                radius: root.radiusSmall
-                color: ColorUtils.transparentize(Appearance.colors.colErrorContainer, 0.5)
-                border.width: 1
-                border.color: ColorUtils.transparentize(Appearance.colors.colError, 0.5)
-                
-                RowLayout {
-                    id: errorContent
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 8
-                    
-                    MaterialSymbol { 
-                        text: "error"
-                        iconSize: 20
-                        color: Appearance.colors.colError
-                    }
-                    
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: YtMusic.googleError
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: Appearance.colors.colOnErrorContainer
-                        wrapMode: Text.WordWrap
-                    }
-                    
-                    RippleButton {
-                        implicitWidth: 28
-                        implicitHeight: 28
-                        buttonRadius: 14
-                        colBackground: "transparent"
-                        colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colError, 0.8)
-                        onClicked: YtMusic.retryConnection()
-                        
-                        contentItem: MaterialSymbol { 
-                            anchors.centerIn: parent
-                            text: "refresh"
-                            iconSize: 18
-                            color: Appearance.colors.colError
-                        }
-                        
-                        StyledToolTip { text: Translation.tr("Retry") }
-                    }
+            implicitHeight: 60
+            buttonRadius: root.radiusNormal
+            colBackground: root.colLayer2
+            colBackgroundHover: root.colLayer2Hover
+            onClicked: {
+                if (YtMusic.cloudLiked.length > 0) {
+                    YtMusic.queue = YtMusic.cloudLiked
+                    YtMusic.play(YtMusic.cloudLiked[0])
+                } else {
+                    YtMusic.fetchLikedSongs()
                 }
             }
-        }
 
-        // === CONNECTION STATUS CARD ===
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: connectionContent.implicitHeight + 24
-            radius: root.radiusNormal
-            color: YtMusic.googleConnected 
-                ? ColorUtils.transparentize(Appearance.colors.colPrimary, 0.85)
-                : YtMusic.googleChecking
-                ? ColorUtils.transparentize(Appearance.colors.colSecondary, 0.85)
-                : root.colLayer2
-            border.width: YtMusic.googleConnected ? 0 : root.borderWidth
-            border.color: root.colBorder
-
-            ColumnLayout {
-                id: connectionContent
+            contentItem: RowLayout {
                 anchors.fill: parent
-                anchors.margins: 12
+                anchors.margins: 10
                 spacing: 12
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 12
-                    
-                    Rectangle {
-                        Layout.preferredWidth: 44
-                        Layout.preferredHeight: 44
-                        radius: 22
-                        color: YtMusic.googleConnected 
-                            ? Appearance.colors.colPrimary 
-                            : YtMusic.googleChecking
-                            ? Appearance.colors.colSecondary
-                            : ColorUtils.transparentize(root.colTextSecondary, 0.8)
-                        
-                        MaterialSymbol { 
-                            anchors.centerIn: parent
-                            text: YtMusic.googleConnected ? "check_circle" 
-                                : YtMusic.googleChecking ? "sync" 
-                                : "account_circle"
-                            iconSize: 26
-                            fill: YtMusic.googleConnected ? 1 : 0
-                            color: YtMusic.googleConnected || YtMusic.googleChecking 
-                                ? Appearance.colors.colOnPrimary 
-                                : root.colTextSecondary
-                            
-                            RotationAnimation on rotation {
-                                from: 0; to: 360
-                                duration: 1000
-                                loops: Animation.Infinite
-                                running: YtMusic.googleChecking
-                            }
-                        }
-                    }
-                    
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 2
-                        
-                        StyledText { 
-                            text: YtMusic.googleConnected 
-                                ? Translation.tr("Connected") 
-                                : YtMusic.googleChecking
-                                ? Translation.tr("Checking...")
-                                : Translation.tr("Not Connected")
-                            font.pixelSize: Appearance.font.pixelSize.normal
-                            font.weight: Font.Medium
-                            color: YtMusic.googleConnected ? Appearance.colors.colPrimary : root.colText
-                        }
-                        
-                        StyledText { 
-                            visible: YtMusic.googleConnected
-                            text: Translation.tr("Using %1 cookies").arg(YtMusic.getBrowserDisplayName(YtMusic.googleBrowser))
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: root.colTextSecondary
-                        }
-                        
-                        StyledText { 
-                            visible: !YtMusic.googleConnected
-                            text: Translation.tr("Select a browser below")
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: root.colTextSecondary
-                        }
-                    }
-                    
-                    RippleButton {
-                        visible: YtMusic.googleConnected
-                        implicitWidth: 32
-                        implicitHeight: 32
-                        buttonRadius: 16
-                        colBackground: "transparent"
-                        colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colError, 0.8)
-                        onClicked: YtMusic.disconnectGoogle()
-                        
-                        contentItem: MaterialSymbol { 
-                            anchors.centerIn: parent
-                            text: "logout"
-                            iconSize: 18
-                            color: Appearance.colors.colError
-                        }
-                        
-                        StyledToolTip { text: Translation.tr("Disconnect") }
-                    }
-                }
-            }
-        }
-
-        // === BROWSER SELECTION ===
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 8
-            
-            RowLayout {
-                Layout.fillWidth: true
-                StyledText { 
-                    text: Translation.tr("Browser")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    font.weight: Font.Medium
-                    color: root.colTextSecondary
-                }
-                Item { Layout.fillWidth: true }
-                StyledText {
-                    visible: YtMusic.defaultBrowser !== ""
-                    text: Translation.tr("Default: %1").arg(YtMusic.defaultBrowser)
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: root.colTextSecondary
-                    opacity: 0.7
-                }
-            }
-            
-            // Detected browsers
-            Flow {
-                Layout.fillWidth: true
-                spacing: 6
-                visible: YtMusic.detectedBrowsers.length > 0
-                
-                Repeater {
-                    model: YtMusic.detectedBrowsers
-                    
-                    RippleButton {
-                        required property string modelData
-                        implicitWidth: Math.max(70, buttonContent.implicitWidth + 16)
-                        implicitHeight: 34
-                        buttonRadius: root.radiusSmall
-                        
-                        readonly property bool isSelected: YtMusic.googleBrowser === modelData
-                        
-                        colBackground: isSelected ? root.colPrimary : root.colLayer2
-                        colBackgroundHover: isSelected ? Appearance.inirEverywhere ? Appearance.inir.colPrimaryHover : Appearance.colors.colPrimaryHover : root.colLayer2Hover
-                        
-                        onClicked: YtMusic.connectGoogle(modelData)
-                        
-                        contentItem: RowLayout {
-                            id: buttonContent
-                            anchors.centerIn: parent
-                            spacing: 6
-                            
-                            StyledText {
-                                text: (YtMusic.browserInfo[modelData]?.icon ?? "🌐")
-                                font.pixelSize: 14
-                            }
-                            
-                            StyledText {
-                                text: (YtMusic.browserInfo[modelData]?.name ?? modelData)
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                font.weight: Font.Medium
-                                color: isSelected ? Appearance.colors.colOnPrimary : root.colText
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Browser Grid
-            GridLayout {
-                Layout.fillWidth: true
-                columns: 2
-                rowSpacing: 8
-                columnSpacing: 8
-                visible: YtMusic.detectedBrowsers.length > 0
-                
-                Repeater {
-                    model: YtMusic.detectedBrowsers
-                    
-                    Rectangle {
-                        required property string modelData
-                        required property int index
-                        
-                        Layout.fillWidth: true
-                        implicitHeight: 56
-                        radius: root.radiusNormal
-                        
-                        readonly property bool isSelected: YtMusic.googleBrowser === modelData
-                        readonly property bool isDefault: YtMusic.defaultBrowser === modelData
-                        readonly property var browserData: YtMusic.browserInfo[modelData] ?? {}
-                        
-                        color: isSelected 
-                            ? root.colPrimary
-                            : Appearance.inirEverywhere ? Appearance.inir.colLayer2
-                            : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
-                            : root.colLayer2
-                        border.width: isSelected ? 0 : (Appearance.auroraEverywhere ? 0 : 1)
-                        border.color: root.colBorder
-                        
-                        Behavior on color { ColorAnimation { duration: 200 } }
-                        Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
-                        
-                        // Hover shadow effect
-                        StyledRectangularShadow {
-                            target: parent
-                            visible: !Appearance.auroraEverywhere && !Appearance.inirEverywhere && browserMouseArea.containsMouse
-                        }
-                        
-                        MouseArea {
-                            id: browserMouseArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: YtMusic.connectGoogle(modelData)
-                            onPressed: parent.scale = 0.97
-                            onReleased: parent.scale = 1.0
-                        }
-                        
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 10
-                            
-                            // Browser Icon
-                            Rectangle {
-                                Layout.preferredWidth: 36
-                                Layout.preferredHeight: 36
-                                radius: 18
-                                color: isSelected 
-                                    ? ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.85)
-                                    : ColorUtils.transparentize(root.colPrimary, 0.85)
-                                
-                                StyledText {
-                                    anchors.centerIn: parent
-                                    text: browserData.icon ?? "🌐"
-                                    font.pixelSize: 20
-                                }
-                            }
-                            
-                            // Browser Name
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 2
-                                
-                                StyledText {
-                                    text: browserData.name ?? modelData
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    font.weight: Font.Medium
-                                    color: isSelected ? Appearance.colors.colOnPrimary : root.colText
-                                }
-                                
-                                StyledText {
-                                    visible: isDefault && !isSelected
-                                    text: Translation.tr("Default")
-                                    font.pixelSize: Appearance.font.pixelSize.smallest ?? 10
-                                    color: root.colPrimary
-                                }
-                            }
-                            
-                            // Check icon
-                            MaterialSymbol {
-                                visible: isSelected && YtMusic.googleConnected
-                                text: "check_circle"
-                                iconSize: 20
-                                fill: 1
-                                color: Appearance.colors.colOnPrimary
-                                
-                                SequentialAnimation on scale {
-                                    running: visible
-                                    NumberAnimation { from: 0; to: 1.0; duration: 200; easing.type: Easing.OutBack }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Manual browser input with enhanced styling
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 6
-                visible: !YtMusic.googleConnected
-                
-                StyledText {
-                    text: Translation.tr("Or enter manually")
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: root.colTextSecondary
-                    opacity: 0.8
-                }
                 
                 Rectangle {
+                    Layout.preferredWidth: 40
+                    Layout.preferredHeight: 40
+                    radius: 4
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: "#4a00e0" }
+                        GradientStop { position: 1.0; color: "#8e2de2" }
+                    }
+                    MaterialSymbol { anchors.centerIn: parent; text: "favorite"; color: "white"; iconSize: 20; fill: 1 }
+                }
+                
+                ColumnLayout {
                     Layout.fillWidth: true
-                    implicitHeight: 44
-                    radius: root.radiusNormal
-                    color: Appearance.inirEverywhere ? Appearance.inir.colLayer2
-                         : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
-                         : root.colLayer2
-                    border.width: customBrowserInput.activeFocus ? 2 : (Appearance.auroraEverywhere ? 0 : 1)
-                    border.color: customBrowserInput.activeFocus ? root.colPrimary : root.colBorder
-                    
-                    Behavior on border.width { NumberAnimation { duration: 150 } }
-                    Behavior on border.color { ColorAnimation { duration: 150 } }
+                    spacing: 2
+                    StyledText { text: Translation.tr("Liked Songs"); font.weight: Font.Bold; color: root.colText }
+                    StyledText { 
+                        text: YtMusic.cloudLiked.length + " " + Translation.tr("songs")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: root.colTextSecondary 
+                    }
+                }
+                
+                MaterialSymbol { text: "play_circle"; iconSize: 32; color: root.colPrimary; fill: 1 }
+            }
+        }
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 14
-                        anchors.rightMargin: 10
-                        spacing: 10
-                        
-                        MaterialSymbol {
-                            text: "search"
-                            iconSize: 20
-                            color: customBrowserInput.activeFocus ? root.colPrimary : root.colTextSecondary
-                            Behavior on color { ColorAnimation { duration: 150 } }
-                        }
-                        
-                        TextField {
-                            id: customBrowserInput
-                            Layout.fillWidth: true
-                            placeholderText: Translation.tr("Browser name (e.g., firefox)")
-                            text: ""
-                            color: root.colText
-                            placeholderTextColor: root.colTextSecondary
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            font.family: Appearance.font.family.main
-                            background: Item {}
-                            selectByMouse: true
-                            
-                            onAccepted: {
-                                if (text.trim()) {
-                                    YtMusic.connectGoogle(text.trim().toLowerCase())
-                                    text = ""
-                                }
-                            }
-                        }
-                        
-                        RippleButton {
-                            visible: customBrowserInput.text.length > 0
-                            opacity: visible ? 1 : 0
-                            implicitWidth: 32
-                            implicitHeight: 32
-                            buttonRadius: 16
-                            colBackground: root.colPrimary
-                            colBackgroundHover: Appearance.inirEverywhere ? Appearance.inir.colPrimaryHover : Appearance.colors.colPrimaryHover
-                            onClicked: {
-                                if (customBrowserInput.text.trim()) {
-                                    YtMusic.connectGoogle(customBrowserInput.text.trim().toLowerCase())
-                                    customBrowserInput.text = ""
-                                }
-                            }
-                            
-                            Behavior on opacity { NumberAnimation { duration: 150 } }
-                            
-                            contentItem: MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: "arrow_forward"
-                                iconSize: 18
-                                color: Appearance.colors.colOnPrimary
-                            }
-                        }
-                    }
-                }
-                
-                // Supported browsers hint
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Translation.tr("💡 Supported: firefox, chrome, chromium, brave, opera, vivaldi, edge, zen, librewolf, floorp")
-                    font.pixelSize: Appearance.font.pixelSize.smallest ?? 10
-                    color: root.colTextSecondary
-                    opacity: 0.7
-                    wrapMode: Text.WordWrap
-                    lineHeight: 1.3
-                }
-            }
+        // Recent Searches / History
+        StyledText {
+            text: Translation.tr("Recently Played")
+            font.weight: Font.Bold
+            color: root.colText
+            visible: YtMusic.recentSearches.length > 0
+        }
+
+        ListView {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 100
+            visible: YtMusic.recentSearches.length > 0
+            orientation: ListView.Horizontal
+            clip: true
+            spacing: 8
+            model: YtMusic.recentSearches
             
-            // Divider
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.topMargin: 8
-                Layout.bottomMargin: 8
-                height: 1
-                color: ColorUtils.transparentize(root.colTextSecondary, 0.9)
-                visible: !YtMusic.googleConnected
-            }
-            
-            // === CUSTOM COOKIES FILE ===
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 8
-                visible: !YtMusic.googleConnected
+            delegate: RippleButton {
+                width: 100
+                height: 100
+                buttonRadius: root.radiusNormal
+                colBackground: root.colLayer2
+                colBackgroundHover: root.colLayer2Hover
+                onClicked: YtMusic.search(modelData)
                 
-                RowLayout {
-                    Layout.fillWidth: true
+                contentItem: ColumnLayout {
+                    anchors.centerIn: parent
                     spacing: 8
-                    
-                    Rectangle {
-                        width: 4
-                        height: 20
-                        radius: 2
-                        color: Appearance.colors.colSecondary
+                    MaterialSymbol {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "history"
+                        iconSize: 32
+                        color: root.colPrimary
                     }
-                    
                     StyledText {
-                        text: Translation.tr("Advanced: Custom Cookies")
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.weight: Font.DemiBold
+                        Layout.fillWidth: true
+                        text: modelData
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
+                        font.pixelSize: Appearance.font.pixelSize.smaller
                         color: root.colText
                     }
-                    
-                    Item { Layout.fillWidth: true }
-                    
-                    RippleButton {
-                        implicitWidth: 28
-                        implicitHeight: 28
-                        buttonRadius: 14
-                        colBackground: "transparent"
-                        colBackgroundHover: root.colLayer2Hover
-                        onClicked: Qt.openUrlExternally("https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp")
-                        
-                        contentItem: MaterialSymbol {
-                            anchors.centerIn: parent
-                            text: "help"
-                            iconSize: 18
-                            color: root.colTextSecondary
-                        }
-                        
-                        StyledToolTip { text: Translation.tr("How to export cookies") }
-                    }
                 }
+            }
+        }
+        
+        Item { Layout.fillHeight: true }
+    }
 
-                Rectangle {
+    component LibraryView: ColumnLayout {
+        spacing: 0
+        
+        // Tabs
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.margins: 4
+            spacing: 8
+            
+            property string tab: "playlists" // playlists, albums
+            
+            Repeater {
+                model: ["playlists", "albums"]
+                RippleButton {
                     Layout.fillWidth: true
-                    implicitHeight: 44
-                    radius: root.radiusNormal
-                    color: Appearance.inirEverywhere ? Appearance.inir.colLayer2
-                         : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
-                         : root.colLayer2
-                    border.width: customCookiesInput.activeFocus ? 2 : (Appearance.auroraEverywhere ? 0 : 1)
-                    border.color: customCookiesInput.activeFocus ? Appearance.colors.colSecondary : root.colBorder
+                    implicitHeight: 32
+                    buttonRadius: 16
+                    colBackground: parent.tab === modelData ? root.colText : "transparent"
+                    onClicked: parent.tab = modelData
                     
-                    Behavior on border.width { NumberAnimation { duration: 150 } }
-                    Behavior on border.color { ColorAnimation { duration: 150 } }
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 14
-                        anchors.rightMargin: 10
-                        spacing: 10
-                        
-                        MaterialSymbol {
-                            text: "description"
-                            iconSize: 20
-                            color: customCookiesInput.activeFocus ? Appearance.colors.colSecondary : root.colTextSecondary
-                            Behavior on color { ColorAnimation { duration: 150 } }
-                        }
-                        
-                        TextField {
-                            id: customCookiesInput
-                            Layout.fillWidth: true
-                            placeholderText: Translation.tr("/path/to/cookies.txt")
-                            text: YtMusic.customCookiesPath
-                            color: root.colText
-                            placeholderTextColor: root.colTextSecondary
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            font.family: Appearance.font.family.main
-                            background: Item {}
-                            selectByMouse: true
-                            
-                            onAccepted: {
-                                if (text.trim()) {
-                                    YtMusic.setCustomCookiesPath(text.trim())
-                                }
-                            }
-                        }
-                        
-                        RippleButton {
-                            visible: customCookiesInput.text !== YtMusic.customCookiesPath
-                            opacity: visible ? 1 : 0
-                            implicitWidth: 32
-                            implicitHeight: 32
-                            buttonRadius: 16
-                            colBackground: Appearance.colors.colSecondary
-                            colBackgroundHover: Qt.darker(Appearance.colors.colSecondary, 1.1)
-                            onClicked: {
-                                if (customCookiesInput.text.trim()) {
-                                    YtMusic.setCustomCookiesPath(customCookiesInput.text.trim())
-                                }
-                            }
-                            
-                            Behavior on opacity { NumberAnimation { duration: 150 } }
-                            
-                            contentItem: MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: "save"
-                                iconSize: 18
-                                color: Appearance.colors.colOnSecondary
-                            }
-                        }
+                    contentItem: StyledText {
+                        anchors.centerIn: parent
+                        text: modelData === "playlists" ? Translation.tr("Playlists") : Translation.tr("Albums")
+                        color: parent.parent.tab === modelData ? root.colSurface : root.colText
+                        font.weight: Font.Medium
                     }
                 }
             }
         }
-
-        // === YOUTUBE MUSIC PLAYLISTS (when connected) ===
+        
+        // Content
         Loader {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            active: YtMusic.googleConnected
-            visible: active
-            
-            Behavior on opacity { NumberAnimation { duration: 300 } }
-
-            sourceComponent: ColumnLayout {
-                spacing: 12
+            sourceComponent: parent.children[0].tab === "playlists" ? playlistsComp : albumsComp
+        }
+        
+        Component {
+            id: playlistsComp
+            ListView {
+                clip: true
+                model: YtMusic.cloudPlaylists
+                spacing: 4
                 
-                // Header with gradient
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: ytMusicHeader.implicitHeight + 20
-                    radius: root.radiusNormal
-                    
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: ColorUtils.transparentize(root.colPrimary, 0.85) }
-                        GradientStop { position: 1.0; color: ColorUtils.transparentize(root.colPrimary, 0.95) }
+                // Empty State
+                visible: count > 0 || YtMusic.libraryLoading
+                
+                header: Loader {
+                    active: YtMusic.libraryLoading
+                    sourceComponent: RowLayout {
+                        width: parent.width
+                        height: 40
+                        Item { Layout.fillWidth: true }
+                        BusyIndicator { implicitWidth: 24; implicitHeight: 24; running: true }
+                        Item { Layout.fillWidth: true }
                     }
+                }
+
+                delegate: RippleButton {
+                    width: ListView.view.width
+                    implicitHeight: 60
+                    buttonRadius: root.radiusSmall
+                    colBackground: "transparent"
+                    colBackgroundHover: root.colLayer2Hover
+                    onClicked: YtMusic.importYtMusicPlaylist(modelData.url)
                     
-                    border.width: 1
-                    border.color: ColorUtils.transparentize(root.colPrimary, 0.7)
-                    
-                    RowLayout {
-                        id: ytMusicHeader
+                    contentItem: RowLayout {
                         anchors.fill: parent
-                        anchors.margins: 12
-                        spacing: 10
+                        anchors.margins: 8
+                        spacing: 12
                         
                         Rectangle {
-                            Layout.preferredWidth: 40
-                            Layout.preferredHeight: 40
-                            radius: 20
-                            color: root.colPrimary
-                            
-                            MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: "cloud_done"
-                                iconSize: 24
-                                fill: 1
-                                color: Appearance.colors.colOnPrimary
-                            }
+                            Layout.preferredWidth: 44
+                            Layout.preferredHeight: 44
+                            radius: 4
+                            color: root.colLayer2
+                            MaterialSymbol { anchors.centerIn: parent; text: "queue_music"; color: root.colTextSecondary }
                         }
                         
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 2
-                            
-                            StyledText {
-                                text: Translation.tr("Your Library")
-                                font.pixelSize: Appearance.font.pixelSize.normal
-                                font.weight: Font.Bold
+                            StyledText { 
+                                text: modelData.title
+                                font.weight: Font.Medium
                                 color: root.colText
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
                             }
-                            
-                            StyledText {
-                                text: Translation.tr("Synced with YouTube Music")
+                            StyledText { 
+                                text: modelData.count + " tracks"
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 color: root.colTextSecondary
                             }
                         }
                         
-                        RippleButton {
-                            implicitWidth: 36
-                            implicitHeight: 36
-                            buttonRadius: 18
-                            colBackground: ColorUtils.transparentize(root.colPrimary, 0.85)
-                            colBackgroundHover: ColorUtils.transparentize(root.colPrimary, 0.7)
-                            onClicked: YtMusic.fetchLibrary()
-                            
-                            contentItem: MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: YtMusic.libraryLoading ? "hourglass_empty" : "refresh"
-                                iconSize: 20
-                                color: root.colPrimary
-                                
-                                RotationAnimation on rotation {
-                                    from: 0; to: 360
-                                    duration: 1000
-                                    loops: Animation.Infinite
-                                    running: YtMusic.libraryLoading
-                                }
-                            }
-                            
-                            StyledToolTip { text: Translation.tr("Refresh library") }
-                        }
+                        MaterialSymbol { text: "play_arrow"; color: root.colTextSecondary }
                     }
                 }
+            }
+        }
+        
+        Component {
+            id: albumsComp
+            GridView {
+                clip: true
+                cellWidth: width / 2
+                cellHeight: cellWidth + 40
+                model: YtMusic.cloudAlbums
                 
-                // Quick Actions Row
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
+                delegate: Item {
+                    width: GridView.view.cellWidth
+                    height: GridView.view.cellHeight
                     
-                    RippleButton {
-                        Layout.fillWidth: true
-                        implicitHeight: 48
-                        buttonRadius: root.radiusNormal
-                        colBackground: ColorUtils.transparentize(Appearance.colors.colError, 0.9)
-                        colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colError, 0.8)
-                        onClicked: YtMusic.fetchLikedSongs()
-                        enabled: !YtMusic.libraryLoading
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 6
+                        spacing: 6
                         
-                        contentItem: RowLayout {
-                            anchors.centerIn: parent
-                            spacing: 8
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: width
+                            radius: root.radiusSmall
+                            color: root.colLayer2
+                            clip: true
                             
-                            MaterialSymbol {
-                                text: "favorite"
-                                iconSize: 22
-                                fill: 1
-                                color: Appearance.colors.colError
-                            }
+                            MaterialSymbol { anchors.centerIn: parent; text: "album"; iconSize: 32; color: root.colTextSecondary }
                             
-                            ColumnLayout {
-                                spacing: 0
-                                
-                                StyledText {
-                                    text: Translation.tr("Liked Songs")
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    font.weight: Font.Medium
-                                    color: Appearance.colors.colError
-                                }
-                                
-                                StyledText {
-                                    text: Translation.tr("Import top 100")
-                                    font.pixelSize: Appearance.font.pixelSize.smallest ?? 10
-                                    color: ColorUtils.transparentize(Appearance.colors.colError, 0.3)
-                                }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: YtMusic.importYtMusicPlaylist(modelData.url)
                             }
                         }
-                    }
-                }
-                
-                // Playlists Header
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    
-                    Rectangle {
-                        width: 3
-                        height: 18
-                        radius: 1.5
-                        color: root.colPrimary
-                    }
-                    
-                    StyledText {
-                        text: Translation.tr("Playlists")
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.weight: Font.DemiBold
-                        color: root.colText
-                    }
-                    
-                    Rectangle {
-                        visible: YtMusic.ytMusicPlaylists.length > 0
-                        implicitWidth: countText.implicitWidth + 12
-                        implicitHeight: 20
-                        radius: 10
-                        color: ColorUtils.transparentize(root.colPrimary, 0.9)
                         
                         StyledText {
-                            id: countText
-                            anchors.centerIn: parent
-                            text: YtMusic.ytMusicPlaylists.length.toString()
-                            font.pixelSize: Appearance.font.pixelSize.smallest ?? 10
-                            font.weight: Font.Bold
-                            color: root.colPrimary
-                        }
-                    }
-                    
-                    Item { Layout.fillWidth: true }
-                }
-
-                // Playlists List
-                ListView {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    clip: true
-                    model: YtMusic.ytMusicPlaylists
-                    spacing: 6
-                    
-                    // Loading indicator
-                    header: Loader {
-                        width: parent?.width ?? 0
-                        active: YtMusic.libraryLoading
-                        height: active ? 60 : 0
-                        visible: active
-                        
-                        Behavior on height { NumberAnimation { duration: 200 } }
-                        
-                        sourceComponent: Rectangle {
-                            radius: root.radiusNormal
-                            color: ColorUtils.transparentize(root.colPrimary, 0.95)
-                            
-                            RowLayout {
-                                anchors.centerIn: parent
-                                spacing: 12
-                                
-                                BusyIndicator {
-                                    implicitWidth: 28
-                                    implicitHeight: 28
-                                    running: true
-                                }
-                                
-                                StyledText {
-                                    text: Translation.tr("Loading playlists...")
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    color: root.colTextSecondary
-                                }
-                            }
-                        }
-                    }
-                    
-                    delegate: Rectangle {
-                        required property var modelData
-                        required property int index
-                        
-                        width: ListView.view.width
-                        implicitHeight: 68
-                        radius: root.radiusNormal
-                        color: playlistMouseArea.containsMouse 
-                            ? root.colSurfaceHover
-                            : Appearance.inirEverywhere ? Appearance.inir.colLayer2
-                            : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
-                            : root.colLayer2
-                        border.width: Appearance.auroraEverywhere ? 0 : 1
-                        border.color: playlistMouseArea.containsMouse 
-                            ? root.colPrimary
-                            : ColorUtils.transparentize(root.colBorder, 0.5)
-                        
-                        Behavior on color { ColorAnimation { duration: 150 } }
-                        Behavior on border.color { ColorAnimation { duration: 150 } }
-                        Behavior on scale { NumberAnimation { duration: 100 } }
-                        
-                        StyledRectangularShadow {
-                            target: parent
-                            visible: !Appearance.auroraEverywhere && !Appearance.inirEverywhere && playlistMouseArea.containsMouse
-                        }
-                        
-                        MouseArea {
-                            id: playlistMouseArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: YtMusic.importYtMusicPlaylist(modelData.url, modelData.title)
-                            onPressed: parent.scale = 0.98
-                            onReleased: parent.scale = 1.0
-                        }
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 12
-                            spacing: 12
-                            
-                            // Playlist Icon
-                            Rectangle {
-                                Layout.preferredWidth: 44
-                                Layout.preferredHeight: 44
-                                radius: root.radiusSmall
-                                
-                                gradient: Gradient {
-                                    GradientStop { 
-                                        position: 0.0
-                                        color: ColorUtils.transparentize(root.colPrimary, 0.85)
-                                    }
-                                    GradientStop { 
-                                        position: 1.0
-                                        color: ColorUtils.transparentize(root.colPrimary, 0.7)
-                                    }
-                                }
-                                
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    text: "queue_music"
-                                    iconSize: 24
-                                    color: root.colPrimary
-                                }
-                            }
-                            
-                            // Playlist Info
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 3
-                                
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    text: modelData.title ?? ""
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    font.weight: Font.Medium
-                                    color: root.colText
-                                    elide: Text.ElideRight
-                                }
-                                
-                                RowLayout {
-                                    spacing: 6
-                                    
-                                    MaterialSymbol {
-                                        text: "music_note"
-                                        iconSize: 14
-                                        color: root.colTextSecondary
-                                    }
-                                    
-                                    StyledText {
-                                        text: Translation.tr("%1 tracks").arg(modelData.count ?? "?")
-                                        font.pixelSize: Appearance.font.pixelSize.smaller
-                                        color: root.colTextSecondary
-                                    }
-                                }
-                            }
-                            
-                            // Download Icon
-                            Rectangle {
-                                Layout.preferredWidth: 36
-                                Layout.preferredHeight: 36
-                                radius: 18
-                                color: playlistMouseArea.containsMouse
-                                    ? root.colPrimary
-                                    : ColorUtils.transparentize(root.colPrimary, 0.9)
-                                
-                                Behavior on color { ColorAnimation { duration: 150 } }
-                                
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    text: "download"
-                                    iconSize: 18
-                                    color: playlistMouseArea.containsMouse
-                                        ? Appearance.colors.colOnPrimary
-                                        : root.colPrimary
-                                    
-                                    Behavior on color { ColorAnimation { duration: 150 } }
-                                }
-                            }
-                        }
-                    }
-
-                    // Empty state
-                    Item {
-                        anchors.centerIn: parent
-                        width: parent.width
-                        height: parent.height
-                        visible: YtMusic.ytMusicPlaylists.length === 0 && !YtMusic.libraryLoading
-                        
-                        ColumnLayout {
-                            anchors.centerIn: parent
-                            spacing: 16
-                            
-                            MaterialSymbol {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: "playlist_add"
-                                iconSize: 56
-                                color: root.colTextSecondary
-                                opacity: 0.4
-                            }
-                            
-                            StyledText {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: Translation.tr("No playlists found")
-                                font.pixelSize: Appearance.font.pixelSize.normal
-                                font.weight: Font.Medium
-                                color: root.colText
-                            }
-                            
-                            StyledText {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: Translation.tr("Create playlists on YouTube Music")
-                                font.pixelSize: Appearance.font.pixelSize.small
-                                color: root.colTextSecondary
-                            }
-                            
-                            RippleButton {
-                                Layout.alignment: Qt.AlignHCenter
-                                implicitWidth: 140
-                                implicitHeight: 40
-                                buttonRadius: 20
-                                colBackground: root.colPrimary
-                                colBackgroundHover: Appearance.inirEverywhere ? Appearance.inir.colPrimaryHover : Appearance.colors.colPrimaryHover
-                                onClicked: YtMusic.fetchLibrary()
-                                
-                                contentItem: RowLayout {
-                                    anchors.centerIn: parent
-                                    spacing: 6
-                                    
-                                    MaterialSymbol {
-                                        text: "refresh"
-                                        iconSize: 18
-                                        color: Appearance.colors.colOnPrimary
-                                    }
-                                    
-                                    StyledText {
-                                        text: Translation.tr("Refresh")
-                                        font.pixelSize: Appearance.font.pixelSize.small
-                                        font.weight: Font.Medium
-                                        color: Appearance.colors.colOnPrimary
-                                    }
-                                }
-                            }
+                            Layout.fillWidth: true
+                            text: modelData.title
+                            font.weight: Font.Medium
+                            elide: Text.ElideRight
+                            horizontalAlignment: Text.AlignHCenter
+                            color: root.colText
                         }
                     }
                 }
             }
         }
+    }
 
-        Item { Layout.fillHeight: true; visible: !YtMusic.googleConnected }
+    component SearchView: ColumnLayout {
+        spacing: 10
+        
+        TextField {
+            Layout.fillWidth: true
+            placeholderText: Translation.tr("Search songs, artists...")
+            color: root.colText
+            placeholderTextColor: root.colTextSecondary
+            background: Rectangle {
+                color: root.colLayer2
+                radius: root.radiusSmall
+                border.width: 1
+                border.color: parent.activeFocus ? root.colPrimary : "transparent"
+            }
+            onAccepted: YtMusic.search(text)
+        }
+        
+        ListView {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
+            model: YtMusic.searchResults
+            spacing: 4
+            
+            delegate: RippleButton {
+                width: ListView.view.width
+                implicitHeight: 56
+                buttonRadius: root.radiusSmall
+                colBackground: "transparent"
+                colBackgroundHover: root.colLayer2Hover
+                onClicked: YtMusic.play(modelData)
+                
+                contentItem: RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 6
+                    spacing: 10
+                    
+                    Image {
+                        Layout.preferredWidth: 44
+                        Layout.preferredHeight: 44
+                        source: modelData.thumbnail
+                        fillMode: Image.PreserveAspectCrop
+                        layer.enabled: true
+                        layer.effect: GE.OpacityMask { maskSource: Rectangle { width: 44; height: 44; radius: 4 } }
+                    }
+                    
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        StyledText { text: modelData.title; font.weight: Font.Medium; color: root.colText; elide: Text.ElideRight; Layout.fillWidth: true }
+                        StyledText { text: modelData.artist; font.pixelSize: Appearance.font.pixelSize.smaller; color: root.colTextSecondary; elide: Text.ElideRight; Layout.fillWidth: true }
+                    }
+                }
+            }
+        }
+    }
+
+    component AccountView: ColumnLayout {
+        spacing: 12
+        
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 100
+            radius: root.radiusNormal
+            color: root.colLayer2
+            
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 16
+                
+                MaterialSymbol {
+                    text: YtMusic.googleConnected ? "check_circle" : "error"
+                    iconSize: 40
+                    color: YtMusic.googleConnected ? Appearance.colors.colSuccess : Appearance.colors.colError
+                }
+                
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    StyledText { 
+                        text: YtMusic.googleConnected ? Translation.tr("Account Connected") : Translation.tr("Not Connected")
+                        font.weight: Font.Bold
+                        font.pixelSize: Appearance.font.pixelSize.large
+                        color: root.colText
+                    }
+                    StyledText {
+                        text: YtMusic.googleConnected 
+                            ? Translation.tr("Using cookies from %1").arg(YtMusic.googleBrowser)
+                            : Translation.tr("Select a browser to sync library")
+                        color: root.colTextSecondary
+                    }
+                }
+            }
+        }
+        
+        // Browser Grid (Only if not connected)
+        GridLayout {
+            visible: !YtMusic.googleConnected
+            Layout.fillWidth: true
+            columns: 3
+            rowSpacing: 8
+            columnSpacing: 8
+            
+            Repeater {
+                model: YtMusic.detectedBrowsers
+                RippleButton {
+                    Layout.fillWidth: true
+                    implicitHeight: 80
+                    buttonRadius: root.radiusNormal
+                    colBackground: root.colLayer2
+                    colBackgroundHover: root.colLayer2Hover
+                    onClicked: YtMusic.connectGoogle(modelData)
+                    
+                    contentItem: ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 8
+                        StyledText { text: YtMusic.browserInfo[modelData]?.icon ?? "🌐"; font.pixelSize: 24 }
+                        StyledText { text: YtMusic.browserInfo[modelData]?.name ?? modelData; color: root.colText }
+                    }
+                }
+            }
+        }
+        
+        RippleButton {
+            visible: YtMusic.googleConnected
+            Layout.fillWidth: true
+            implicitHeight: 40
+            buttonRadius: root.radiusSmall
+            colBackground: ColorUtils.transparentize(Appearance.colors.colError, 0.9)
+            onClicked: YtMusic.disconnectGoogle()
+            contentItem: RowLayout {
+                anchors.centerIn: parent
+                MaterialSymbol { text: "logout"; color: Appearance.colors.colError }
+                StyledText { text: Translation.tr("Disconnect"); color: Appearance.colors.colError }
+            }
+        }
+        
+        Item { Layout.fillHeight: true }
     }
 }

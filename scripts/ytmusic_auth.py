@@ -57,7 +57,7 @@ def get_auth_from_browser(browser="firefox", cookies_file=None):
         )
 
         # Run with timeout
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
 
         if result.returncode == 0:
             # Cookies work! Return success
@@ -80,9 +80,15 @@ def get_auth_from_browser(browser="firefox", cookies_file=None):
             )
 
             if "unsupported" in clean_error.lower():
-                clean_error = "Browser not supported or locked"
+                clean_error = (
+                    "Browser not supported or locked. Try closing the browser."
+                )
             elif "cookie" in clean_error.lower():
-                clean_error = "Could not read cookies"
+                clean_error = (
+                    "Could not read cookies. Browser might be locking the file."
+                )
+            elif "permission" in clean_error.lower():
+                clean_error = "Permission denied reading cookies."
 
             print(
                 json.dumps(
@@ -90,13 +96,21 @@ def get_auth_from_browser(browser="firefox", cookies_file=None):
                         "status": "error",
                         "source": cookies_file if cookies_file else browser,
                         "message": clean_error,
+                        "raw_error": error_msg,
                     }
                 )
             )
             return 1
 
     except subprocess.TimeoutExpired:
-        print(json.dumps({"status": "error", "message": "Connection timeout"}))
+        print(
+            json.dumps(
+                {
+                    "status": "error",
+                    "message": "Connection timeout - check your internet connection",
+                }
+            )
+        )
         return 1
     except Exception as e:
         print(json.dumps({"status": "error", "message": f"Error: {str(e)}"}))
@@ -120,7 +134,7 @@ def main():
     if not browser and not cookies_file:
         browser = "firefox"  # Default
 
-    # Ensure browser is a string if it was None (though logic above handles it)
+    # Ensure browser is a string
     browser_str = browser if browser else ""
 
     return get_auth_from_browser(browser_str, cookies_file)

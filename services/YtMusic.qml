@@ -9,12 +9,7 @@ import qs.modules.common
 
 /**
  * YT Music service - Search and play music from YouTube using yt-dlp + mpv.
- * 
- * Features:
- * - MPRIS integration (mpv exposes controls, synced with MprisController)
- * - Playlist management (save/load custom playlists)
- * - Google account sync (via browser cookies for YouTube Music playlists)
- * - Queue management with persistence
+ * Features: MPRIS, Library Sync (Playlists, Albums), Queue, Persistent Cache.
  */
 Singleton {
     id: root
@@ -26,7 +21,7 @@ Singleton {
     property bool libraryLoading: false
     property string error: ""
     
-    // Current track info (synced with MPRIS when available)
+    // Current track info
     property string currentTitle: ""
     property string currentArtist: ""
     property string currentThumbnail: ""
@@ -35,17 +30,21 @@ Singleton {
     property real currentDuration: 0
     property real currentPosition: 0
     
-    // Playback state (from MPRIS)
+    // Playback state
     property bool isPlaying: _mpvPlayer?.isPlaying ?? false
     property bool canPause: _mpvPlayer?.canPause ?? false
     property bool canSeek: _mpvPlayer?.canSeek ?? false
     property real volume: _mpvPlayer?.volume ?? 1.0
     
-    // Collections
+    // Collections (Runtime)
     property var searchResults: []
     property var recentSearches: []
     property var queue: []
-    property var playlists: []  // Local playlists
+    
+    // Cloud Library (Synced & Cached)
+    property var cloudPlaylists: []
+    property var cloudAlbums: []
+    property var cloudLiked: []
     
     // Google account
     property bool googleConnected: false
@@ -53,29 +52,24 @@ Singleton {
     property string googleError: ""
     property string googleBrowser: Config.options?.sidebar?.ytmusic?.browser ?? "firefox"
     property string customCookiesPath: Config.options?.sidebar?.ytmusic?.cookiesPath ?? ""
-    
-    // Cloud Library
-    property var ytMusicPlaylists: []
-    property var ytMusicMixes: []
-    property var ytMusicLiked: []
     property list<string> detectedBrowsers: [] 
     
     readonly property int maxRecentSearches: 10
     readonly property int maxSearchResults: 20
     
-    // Supported browsers with their cookie paths
+    // Browser metadata
     readonly property var browserInfo: ({
-        "firefox": { name: "Firefox", icon: "🦊", configPath: "~/.mozilla/firefox" },
-        "chrome": { name: "Chrome", icon: "🌐", configPath: "~/.config/google-chrome" },
-        "chromium": { name: "Chromium", icon: "🔵", configPath: "~/.config/chromium" },
-        "brave": { name: "Brave", icon: "🦁", configPath: "~/.config/BraveSoftware" },
-        "vivaldi": { name: "Vivaldi", icon: "🎼", configPath: "~/.config/vivaldi" },
-        "opera": { name: "Opera", icon: "🔴", configPath: "~/.config/opera" },
-        "edge": { name: "Edge", icon: "🔷", configPath: "~/.config/microsoft-edge" },
-        "zen": { name: "Zen", icon: "☯️", configPath: "~/.zen" },
-        "librewolf": { name: "LibreWolf", icon: "🐺", configPath: "~/.librewolf" },
-        "floorp": { name: "Floorp", icon: "🌊", configPath: "~/.floorp" },
-        "waterfox": { name: "Waterfox", icon: "💧", configPath: "~/.waterfox" }
+        "firefox": { name: "Firefox", icon: "🦊" },
+        "chrome": { name: "Chrome", icon: "🌐" },
+        "chromium": { name: "Chromium", icon: "🔵" },
+        "brave": { name: "Brave", icon: "🦁" },
+        "vivaldi": { name: "Vivaldi", icon: "🎼" },
+        "opera": { name: "Opera", icon: "🔴" },
+        "edge": { name: "Edge", icon: "🔷" },
+        "zen": { name: "Zen", icon: "☯️" },
+        "librewolf": { name: "LibreWolf", icon: "🐺" },
+        "floorp": { name: "Floorp", icon: "🌊" },
+        "waterfox": { name: "Waterfox", icon: "💧" }
     })
 
     // === MPRIS Player Reference ===
@@ -88,32 +82,32 @@ Singleton {
         return null
     }
 
-    // Sync position from MPRIS
+    // Sync position
     Timer {
         interval: 1000
         running: root._mpvPlayer !== null && root.isPlaying
         repeat: true
         onTriggered: {
-            if (root._mpvPlayer) {
-                root.currentPosition = root._mpvPlayer.position
-            }
+            if (root._mpvPlayer) root.currentPosition = root._mpvPlayer.position
         }
     }
 
     // === Public Functions ===
     
-    // Search
     function search(query): void {
         if (!query.trim() || !root.available) return
         root.error = ""
         root.searching = true
         root.searchResults = []
         _searchQuery = query.trim()
+        
+        // Try searching with cookies first if connected, otherwise fallback to public
+        _searchProc.useCookies = root.googleConnected
         _searchProc.running = true
+        
         _addToRecentSearches(query.trim())
     }
 
-    // Playback control
     function play(item): void {
         if (!item?.videoId || !root.available) return
         root.error = ""
@@ -132,9 +126,7 @@ Singleton {
     }
 
     function playFromSearch(index): void {
-        if (index >= 0 && index < searchResults.length) {
-            play(searchResults[index])
-        }
+        if (index >= 0 && index < searchResults.length) play(searchResults[index])
     }
 
     function stop(): void {
@@ -143,24 +135,18 @@ Singleton {
     }
 
     function togglePlaying(): void {
-        if (root._mpvPlayer) {
-            root._mpvPlayer.togglePlaying()
-        }
+        if (root._mpvPlayer) root._mpvPlayer.togglePlaying()
     }
 
     function seek(position): void {
-        if (root._mpvPlayer && root.canSeek) {
-            root._mpvPlayer.position = position
-        }
+        if (root._mpvPlayer && root.canSeek) root._mpvPlayer.position = position
     }
 
     function setVolume(vol): void {
-        if (root._mpvPlayer) {
-            root._mpvPlayer.volume = Math.max(0, Math.min(1, vol))
-        }
+        if (root._mpvPlayer) root._mpvPlayer.volume = Math.max(0, Math.min(1, vol))
     }
 
-    // Queue management
+    // Queue
     function addToQueue(item): void {
         if (!item?.videoId) return
         root.queue = [...root.queue, item]
@@ -191,15 +177,12 @@ Singleton {
     }
 
     function playQueue(): void {
-        if (root.queue.length > 0) {
-            playNext()
-        }
+        if (root.queue.length > 0) playNext()
     }
 
     function shuffleQueue(): void {
         if (root.queue.length < 2) return
         let q = [...root.queue]
-        // Fisher-Yates shuffle
         for (let i = q.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [q[i], q[j]] = [q[j], q[i]]
@@ -208,75 +191,11 @@ Singleton {
         _persistQueue()
     }
 
-    // Playlist management
-    function createPlaylist(name): void {
-        if (!name.trim()) return
-        root.playlists = [...root.playlists, { name: name.trim(), items: [] }]
-        _persistPlaylists()
-    }
-
-    function deletePlaylist(index): void {
-        if (index >= 0 && index < root.playlists.length) {
-            let p = [...root.playlists]
-            p.splice(index, 1)
-            root.playlists = p
-            _persistPlaylists()
-        }
-    }
-
-    function addToPlaylist(playlistIndex, item): void {
-        if (playlistIndex < 0 || playlistIndex >= root.playlists.length) return
-        if (!item?.videoId) return
-        
-        let p = [...root.playlists]
-        // Avoid duplicates
-        if (!p[playlistIndex].items.find(i => i.videoId === item.videoId)) {
-            p[playlistIndex].items = [...p[playlistIndex].items, {
-                videoId: item.videoId,
-                title: item.title,
-                artist: item.artist,
-                duration: item.duration,
-                thumbnail: _getThumbnailUrl(item.videoId)
-            }]
-            root.playlists = p
-            _persistPlaylists()
-        }
-    }
-
-    function removeFromPlaylist(playlistIndex, itemIndex): void {
-        if (playlistIndex < 0 || playlistIndex >= root.playlists.length) return
-        let p = [...root.playlists]
-        if (itemIndex >= 0 && itemIndex < p[playlistIndex].items.length) {
-            p[playlistIndex].items.splice(itemIndex, 1)
-            root.playlists = p
-            _persistPlaylists()
-        }
-    }
-
-    function playPlaylist(playlistIndex, shuffle): void {
-        if (playlistIndex < 0 || playlistIndex >= root.playlists.length) return
-        let items = [...root.playlists[playlistIndex].items]
-        if (items.length === 0) return
-        
-        if (shuffle) {
-            // Fisher-Yates shuffle
-            for (let i = items.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [items[i], items[j]] = [items[j], items[i]]
-            }
-        }
-        
-        root.queue = items.slice(1)
-        _persistQueue()
-        play(items[0])
-    }
-
-    // Google account / YouTube Music
+    // Account & Sync
     function connectGoogle(browser): void {
         root.googleBrowser = browser || "firefox"
         root.googleError = ""
         root.googleChecking = true
-        // Clear custom cookies if switching to browser
         if (root.customCookiesPath) {
             root.customCookiesPath = ""
             Config.setNestedValue('sidebar.ytmusic.cookiesPath', "")
@@ -297,9 +216,10 @@ Singleton {
     function disconnectGoogle(): void {
         root.googleConnected = false
         root.googleError = ""
-        root.ytMusicPlaylists = []
-        root.ytMusicMixes = []
-        root.ytMusicLiked = []
+        root.cloudPlaylists = []
+        root.cloudAlbums = []
+        root.cloudLiked = []
+        _persistCache()
     }
     
     function openYtMusicInBrowser(): void {
@@ -318,21 +238,20 @@ Singleton {
 
     function fetchLibrary(): void {
         if (!root.googleConnected) return
+        console.log("[YtMusic] Fetching library...")
         root.libraryLoading = true
         _ytPlaylistsProc.running = true
+        _ytAlbumsProc.running = true
         _likedSongsProc.running = true
-        // _mixesProc.running = true // TODO: Implement mixes fetching
     }
 
-    function importYtMusicPlaylist(playlistUrl, name): void {
-        if (!root.googleConnected || !playlistUrl) return
+    function importYtMusicPlaylist(playlistUrl): void {
+        if (!playlistUrl) return
         root.searching = true
         _importPlaylistUrl = playlistUrl
-        _importPlaylistName = name || "Imported Playlist"
         _importPlaylistProc.running = true
     }
 
-    // Recent searches
     function clearRecentSearches(): void {
         root.recentSearches = []
         _persistRecentSearches()
@@ -342,7 +261,6 @@ Singleton {
     property string _searchQuery: ""
     property string _playUrl: ""
     property string _importPlaylistUrl: ""
-    property string _importPlaylistName: ""
     
     property var _cookieArgs: root.customCookiesPath 
         ? ["--cookies", root.customCookiesPath] 
@@ -354,7 +272,6 @@ Singleton {
 
     function _getThumbnailUrl(videoId): string {
         if (!videoId) return ""
-        // Validate videoId - should be 11 chars and not a channel ID (UC prefix)
         if (videoId.length !== 11 || videoId.startsWith("UC")) return ""
         return `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`
     }
@@ -369,14 +286,23 @@ Singleton {
     function _loadData(): void {
         root.recentSearches = Config.options?.sidebar?.ytmusic?.recentSearches ?? []
         root.queue = Config.options?.sidebar?.ytmusic?.queue ?? []
-        root.playlists = Config.options?.sidebar?.ytmusic?.playlists ?? []
-        // Use saved browser, or wait for default detection
+        
+        // Load cached library
+        root.cloudPlaylists = Config.options?.sidebar?.ytmusic?.cache?.playlists ?? []
+        root.cloudAlbums = Config.options?.sidebar?.ytmusic?.cache?.albums ?? []
+        root.cloudLiked = Config.options?.sidebar?.ytmusic?.cache?.liked ?? []
+        
         const savedBrowser = Config.options?.sidebar?.ytmusic?.browser
-        if (savedBrowser) {
-            root.googleBrowser = savedBrowser
-        }
-        // Check Google connection after a delay
+        if (savedBrowser) root.googleBrowser = savedBrowser
+        
+        // Auto-connect if configured
         Qt.callLater(_checkGoogleConnection)
+    }
+
+    function _persistCache(): void {
+        Config.setNestedValue('sidebar.ytmusic.cache.playlists', root.cloudPlaylists)
+        Config.setNestedValue('sidebar.ytmusic.cache.albums', root.cloudAlbums)
+        Config.setNestedValue('sidebar.ytmusic.cache.liked', root.cloudLiked)
     }
 
     // Detect system default browser
@@ -385,7 +311,6 @@ Singleton {
         command: ["/usr/bin/xdg-settings", "get", "default-web-browser"]
         stdout: SplitParser {
             onRead: line => {
-                // Parse "firefox.desktop" -> "firefox", "google-chrome.desktop" -> "chrome"
                 const desktop = line.trim().toLowerCase()
                 let browser = ""
                 if (desktop.includes("firefox")) browser = "firefox"
@@ -407,7 +332,7 @@ Singleton {
     
     property string defaultBrowser: ""
 
-    // Detect installed browsers by checking config folders
+    // Detect installed browsers
     Process {
         id: _detectBrowsersProc
         command: ["/bin/bash", "-c", `
@@ -436,9 +361,7 @@ Singleton {
     function _addToRecentSearches(query): void {
         let recent = root.recentSearches.filter(s => s.toLowerCase() !== query.toLowerCase())
         recent.unshift(query)
-        if (recent.length > root.maxRecentSearches) {
-            recent = recent.slice(0, root.maxRecentSearches)
-        }
+        if (recent.length > root.maxRecentSearches) recent = recent.slice(0, root.maxRecentSearches)
         root.recentSearches = recent
         _persistRecentSearches()
     }
@@ -451,10 +374,6 @@ Singleton {
         Config.setNestedValue('sidebar.ytmusic.queue', root.queue)
     }
 
-    function _persistPlaylists(): void {
-        Config.setNestedValue('sidebar.ytmusic.playlists', root.playlists)
-    }
-
     function _checkGoogleConnection(): void {
         _googleCheckProc.running = true
     }
@@ -465,16 +384,13 @@ Singleton {
         onTriggered: _playProc.running = true
     }
 
-    // Auto-play next when track ends
+    // Auto-play next
     Connections {
         target: root._mpvPlayer
         enabled: root._mpvPlayer !== null
-        
         function onPlaybackStateChanged() {
-            // When mpv stops and we have queue items, play next
             if (root._mpvPlayer && !root._mpvPlayer.isPlaying && 
                 root.currentVideoId && root.queue.length > 0) {
-                // Small delay to distinguish between pause and track end
                 _autoNextTimer.restart()
             } else {
                 _autoNextTimer.stop()
@@ -486,70 +402,60 @@ Singleton {
         id: _autoNextTimer
         interval: 500
         onTriggered: {
-            // Double-check mpv is really stopped (not just paused)
             if (root._mpvPlayer && !root._mpvPlayer.isPlaying && root.queue.length > 0) {
                 root.playNext()
             }
         }
     }
 
-    // Check if yt-dlp is available
     Process {
         id: _checkAvailability
         command: ["/usr/bin/which", "yt-dlp"]
-        onExited: (code) => {
-            root.available = (code === 0)
-        }
+        onExited: (code) => { root.available = (code === 0) }
     }
 
-    // Check Google account connection using Python helper script
     Process {
         id: _googleCheckProc
         property string outputData: ""
         command: ["/usr/bin/python3",
             Quickshell.workingDirectory + "/scripts/ytmusic_auth.py",
-            root.customCookiesPath ? "" : root.googleBrowser  // Empty if using custom cookies
+            root.customCookiesPath ? "" : root.googleBrowser
         ]
-        stdout: SplitParser {
-            onRead: line => {
-                _googleCheckProc.outputData += line
-            }
-        }
-        onStarted: { 
-            outputData = ""
-            root.googleChecking = true
-        }
+        stdout: SplitParser { onRead: line => _googleCheckProc.outputData += line }
+        onStarted: { outputData = ""; root.googleChecking = true }
         onExited: (code) => {
             root.googleChecking = false
             try {
                 const result = JSON.parse(outputData)
                 if (result.status === "success") {
+                    console.log("[YtMusic] Connected successfully via " + result.source)
                     root.googleConnected = true
                     root.googleError = ""
-                    // Auto-fetch library on successful connection
-                    root.fetchLibrary()
+                    // Auto-fetch if cache is empty
+                    if (root.cloudPlaylists.length === 0) root.fetchLibrary()
                 } else {
+                    console.warn("[YtMusic] Connection failed: " + result.message)
                     root.googleConnected = false
                     root.googleError = result.message || Translation.tr("Connection failed")
                 }
             } catch (e) {
                 root.googleConnected = false
-                root.googleError = Translation.tr("Failed to verify connection. Make sure yt-dlp is installed.")
+                root.googleError = Translation.tr("Failed to verify connection.")
             }
         }
     }
 
-    // Search YouTube
+    // Search Process with Fallback
     Process {
         id: _searchProc
+        property bool useCookies: false
+        
         command: ["/usr/bin/yt-dlp",
-            ...(root.googleConnected ? root._cookieArgs : []),
-            "--flat-playlist",
-            "--no-warnings",
-            "--quiet",
-            "-j",
+            ...(useCookies ? root._cookieArgs : []),
+            "--flat-playlist", "--no-warnings", "--quiet", "-j",
             `ytsearch${root.maxSearchResults}:${root._searchQuery}`
         ]
+        
         stdout: SplitParser {
             onRead: line => {
                 try {
@@ -567,58 +473,52 @@ Singleton {
                 } catch (e) {}
             }
         }
-        onRunningChanged: {
-            if (!running) root.searching = false
+        
+        stderr: SplitParser {
+            onRead: line => console.warn("[YtMusic] Search error: " + line)
         }
+        
+        onRunningChanged: { if (!running) root.searching = false }
+        
         onExited: (code) => {
-            if (code !== 0 && root.searchResults.length === 0) {
-                root.error = Translation.tr("Search failed. Check your connection.")
+            if (code !== 0) {
+                if (useCookies) {
+                    console.log("[YtMusic] Search with cookies failed, retrying without cookies...")
+                    // Fallback: try without cookies
+                    _searchProc.useCookies = false
+                    _searchProc.running = true
+                } else {
+                    root.error = Translation.tr("Search failed.")
+                }
             }
         }
     }
 
-    // Stop any existing mpv playback
     Process {
         id: _stopProc
         command: ["/usr/bin/pkill", "-f", "mpv.*--no-video"]
     }
 
-    // Play audio via mpv (exposes MPRIS)
     Process {
         id: _playProc
         command: ["/usr/bin/mpv",
-            "--no-video",
-            "--really-quiet",
+            "--no-video", "--really-quiet",
             "--force-media-title=" + root.currentTitle,
             "--script-opts=ytdl_hook-ytdl_path=yt-dlp",
             ...(root.googleConnected ? ["--ytdl-raw-options=" + root._mpvCookieArgs] : []),
             root._playUrl
         ]
-        onRunningChanged: {
-            if (running) {
-                root.loading = false
-            }
-        }
-        onExited: (code) => {
-            root.loading = false
-            if (code !== 0 && code !== 4 && code !== 9 && code !== 15) { // 9=KILL, 15=TERM
-                root.error = Translation.tr("Playback failed")
-            }
-        }
+        onRunningChanged: { if (running) root.loading = false }
+        onExited: (code) => { root.loading = false }
     }
 
-    // Fetch YouTube Music playlists from account
+    // --- Library Fetchers ---
+
+    // 1. Playlists
     Process {
         id: _ytPlaylistsProc
         property var results: []
-        command: ["/usr/bin/yt-dlp",
-            ...root._cookieArgs,
-            "--flat-playlist",
-            "--no-warnings",
-            "--quiet",
-            "-j",
-            "https://music.youtube.com/library/playlists"
-        ]
+        command: ["/usr/bin/yt-dlp", ...root._cookieArgs, "--flat-playlist", "--no-warnings", "--quiet", "-j", "https://music.youtube.com/library/playlists"]
         stdout: SplitParser {
             onRead: line => {
                 try {
@@ -628,7 +528,8 @@ Singleton {
                             id: data.id,
                             title: data.title,
                             url: data.url || `https://music.youtube.com/playlist?list=${data.id}`,
-                            count: data.playlist_count || 0
+                            count: data.playlist_count || 0,
+                            thumbnail: "" 
                         })
                     }
                 } catch (e) {}
@@ -637,24 +538,91 @@ Singleton {
         onStarted: { results = [] }
         onRunningChanged: {
             if (!running) {
-                root.ytMusicPlaylists = results
-                // Only stop library loading if liked songs is also done
-                if (!_likedSongsProc.running) root.libraryLoading = false
+                console.log("[YtMusic] Fetched " + results.length + " playlists")
+                root.cloudPlaylists = results
+                root._persistCache()
+                checkLibraryLoading()
             }
         }
     }
 
-    // Import a YouTube Music playlist
+    // 2. Albums
+    Process {
+        id: _ytAlbumsProc
+        property var results: []
+        command: ["/usr/bin/yt-dlp", ...root._cookieArgs, "--flat-playlist", "--no-warnings", "--quiet", "-j", "https://music.youtube.com/library/albums"]
+        stdout: SplitParser {
+            onRead: line => {
+                try {
+                    const data = JSON.parse(line)
+                    if (data.id && data.title) {
+                        _ytAlbumsProc.results.push({
+                            id: data.id,
+                            title: data.title,
+                            artist: data.uploader || data.channel || "",
+                            url: data.url || `https://music.youtube.com/playlist?list=${data.id}`
+                        })
+                    }
+                } catch (e) {}
+            }
+        }
+        onStarted: { results = [] }
+        onRunningChanged: {
+            if (!running) {
+                console.log("[YtMusic] Fetched " + results.length + " albums")
+                root.cloudAlbums = results
+                root._persistCache()
+                checkLibraryLoading()
+            }
+        }
+    }
+    
+    // 3. Liked Songs (Limited to 50 for speed)
+    Process {
+        id: _likedSongsProc
+        property var items: []
+        command: ["/usr/bin/yt-dlp", ...root._cookieArgs, "--flat-playlist", "--no-warnings", "--quiet", "-j", "-I", "1:50", "https://music.youtube.com/playlist?list=LM"]
+        stdout: SplitParser {
+            onRead: line => {
+                try {
+                    const data = JSON.parse(line)
+                    if (data.id) {
+                        _likedSongsProc.items.push({
+                            videoId: data.id,
+                            title: data.title || "Unknown",
+                            artist: data.channel || data.uploader || "",
+                            duration: data.duration || 0,
+                            thumbnail: root._getThumbnailUrl(data.id)
+                        })
+                    }
+                } catch (e) {}
+            }
+        }
+        onStarted: { items = [] }
+        onRunningChanged: {
+            if (!running) {
+                console.log("[YtMusic] Fetched " + items.length + " liked songs")
+                root.cloudLiked = items
+                root._persistCache()
+                checkLibraryLoading()
+            }
+        }
+    }
+
+    function checkLibraryLoading() {
+        if (!_ytPlaylistsProc.running && !_ytAlbumsProc.running && !_likedSongsProc.running) {
+            root.libraryLoading = false
+        }
+    }
+
+    // Import Playlist (Play immediately)
     Process {
         id: _importPlaylistProc
         property var items: []
-        command: ["/usr/bin/yt-dlp",
-            ...root._cookieArgs,
-            "--flat-playlist",
-            "--no-warnings",
-            "--quiet",
-            "-j",
-            root._importPlaylistUrl
+        // Use cookies if available for better access (e.g. private playlists)
+        command: ["/usr/bin/yt-dlp", 
+            ...(root.googleConnected ? root._cookieArgs : []),
+            "--flat-playlist", "--no-warnings", "--quiet", "-j", root._importPlaylistUrl
         ]
         stdout: SplitParser {
             onRead: line => {
@@ -675,67 +643,10 @@ Singleton {
         onStarted: { items = [] }
         onRunningChanged: {
             if (!running && items.length > 0) {
-                root.playlists = [...root.playlists, {
-                    name: root._importPlaylistName,
-                    items: items
-                }]
-                root._persistPlaylists()
+                root.queue = items
+                root._persistQueue()
+                root.play(items[0])
                 root.searching = false
-            }
-        }
-    }
-    
-    // Fetch Liked Songs from YouTube Music
-    Process {
-        id: _likedSongsProc
-        property var items: []
-        command: ["/usr/bin/yt-dlp",
-            ...root._cookieArgs,
-            "--flat-playlist",
-            "--no-warnings",
-            "--quiet",
-            "-j",
-            "-I", "1:100",  // Limit to first 100 liked songs for performance
-            "https://music.youtube.com/playlist?list=LM"
-        ]
-        stdout: SplitParser {
-            onRead: line => {
-                try {
-                    const data = JSON.parse(line)
-                    if (data.id) {
-                        _likedSongsProc.items.push({
-                            videoId: data.id,
-                            title: data.title || "Unknown",
-                            artist: data.channel || data.uploader || "",
-                            duration: data.duration || 0,
-                            thumbnail: root._getThumbnailUrl(data.id)
-                        })
-                    }
-                } catch (e) {}
-            }
-        }
-        onStarted: { items = [] }
-        onRunningChanged: {
-            if (!running) {
-                if (items.length > 0) {
-                    // Check if "Liked Songs" playlist already exists
-                    const existingIdx = root.playlists.findIndex(p => p.name === "Liked Songs")
-                    if (existingIdx >= 0) {
-                        // Update existing
-                        let p = [...root.playlists]
-                        p[existingIdx].items = items
-                        root.playlists = p
-                    } else {
-                        // Create new
-                        root.playlists = [...root.playlists, {
-                            name: "Liked Songs",
-                            items: items
-                        }]
-                    }
-                    root._persistPlaylists()
-                }
-                // Only stop library loading if playlists is also done
-                if (!_ytPlaylistsProc.running) root.libraryLoading = false
             }
         }
     }

@@ -766,7 +766,12 @@
       "cookiesPath": "",
       "recentSearches": [],
       "queue": [],
-      "playlists": []
+      "cache": {
+        "playlists": [],
+        "albums": [],
+        "artists": [],
+        "liked": []
+      }
     },
     "widgets": {
         "clock": {

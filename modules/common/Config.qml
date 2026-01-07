@@ -213,6 +213,14 @@ Singleton {
                     property bool enableQtApps: true
                     property bool enableTerminal: true
                     property bool enableVesktop: true
+                    property JsonObject terminals: JsonObject {
+                        property bool kitty: true
+                        property bool alacritty: true
+                        property bool foot: true
+                        property bool wezterm: true
+                        property bool ghostty: true
+                        property bool konsole: true
+                    }
                     property JsonObject terminalGenerationProps: JsonObject {
                         property real harmony: 0.6
                         property real harmonizeThreshold: 100
@@ -815,6 +823,19 @@ Singleton {
                 property JsonObject tools: JsonObject {
                     property bool enable: false
                 }
+                // YT Music tab - Search and play YouTube music via yt-dlp
+                property JsonObject ytmusic: JsonObject {
+                    property bool enable: false
+                    property string browser: "firefox"
+                    property string cookiesPath: ""
+                    property list<string> recentSearches: []
+                    property list<var> queue: []
+                    property JsonObject cache: JsonObject {
+                        property list<var> playlists: []
+                        property list<var> albums: []
+                        property list<var> liked: []
+                    }
+                }
                 // Widgets tab in left sidebar
                 property JsonObject widgets: JsonObject {
                     property bool enable: true
@@ -915,6 +936,11 @@ Singleton {
                     property bool showMic: false
                     property bool showVolume: true
                     property bool showBrightness: true
+                }
+
+                // Right sidebar widget toggles
+                property JsonObject right: JsonObject {
+                    property list<string> enabledWidgets: ["calendar", "todo", "notepad", "calculator", "sysmon", "timer"]
                 }
             }
 
