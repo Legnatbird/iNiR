@@ -161,9 +161,17 @@ Singleton {
         readonly property color _inkSecondary: "#5c534a"    // Warm gray - secondary text
         readonly property color _inkMuted: "#8a7f73"        // Warm taupe - inactive/disabled
         
-        property color colSubtext: root._auroraLightMode ? _inkSecondary : m3colors.m3outline
+        // Aurora Mode Contrast Boost Logic
+        // If we are in Aurora Dark mode (glass), we CANNOT use dark variants for text.
+        // We must force lighter text to ensure readability against the blurred backdrop.
+        readonly property bool _needsHighContrast: auroraEverywhere && !root._auroraLightMode
+        
+        property color colSubtext: _needsHighContrast 
+            ? ColorUtils.mix(m3colors.m3onSurface, m3colors.m3onSurfaceVariant, 0.3) // 70% Primary, 30% Variant (Brighter)
+            : (root._auroraLightMode ? _inkSecondary : m3colors.m3outline)
+            
         // Layer 0
-        property color colLayer0Base: ColorUtils.mix(m3colors.m3background, m3colors.m3primary, Config?.options?.appearance?.extraBackgroundTint ? 0.99 : 1)
+        property color colLayer0Base: m3colors.transparent ? "transparent" : ColorUtils.mix(m3colors.m3background, m3colors.m3primary, Config?.options?.appearance?.extraBackgroundTint ? 0.99 : 1)
         property color colLayer0: ColorUtils.transparentize(colLayer0Base, root.backgroundTransparency)
         property color colOnLayer0: root._auroraLightMode ? _inkPrimary : m3colors.m3onBackground
         property color colLayer0Hover: ColorUtils.transparentize(ColorUtils.mix(colLayer0, colOnLayer0, 0.9, root.contentTransparency))
@@ -171,25 +179,25 @@ Singleton {
         property color colLayer0Border: ColorUtils.mix(root.m3colors.m3outlineVariant, colLayer0, 0.4)
         // Layer 1
         property color colLayer1Base: m3colors.m3surfaceContainerLow
-        property color colLayer1: ColorUtils.solveOverlayColor(colLayer0Base, colLayer1Base, 1 - root.contentTransparency)
-        property color colOnLayer1: root._auroraLightMode ? _inkPrimary : m3colors.m3onSurfaceVariant
+        property color colLayer1: auroraEverywhere ? ColorUtils.transparentize(m3colors.m3surfaceContainerLow, 0.4) : ColorUtils.solveOverlayColor(colLayer0Base, colLayer1Base, 1 - root.contentTransparency)
+        property color colOnLayer1: _needsHighContrast ? m3colors.m3onSurface : (root._auroraLightMode ? _inkPrimary : m3colors.m3onSurfaceVariant) // Force Primary White in Aurora Dark
         property color colOnLayer1Inactive: root._auroraLightMode ? _inkMuted : ColorUtils.mix(colOnLayer1, colLayer1, 0.45)
         property color colLayer1Hover: ColorUtils.transparentize(ColorUtils.mix(colLayer1, colOnLayer1, 0.92), root.contentTransparency)
         property color colLayer1Active: ColorUtils.transparentize(ColorUtils.mix(colLayer1, colOnLayer1, 0.85), root.contentTransparency)
         // Layer 2
         property color colLayer2Base: m3colors.m3surfaceContainer
-        property color colLayer2: ColorUtils.solveOverlayColor(colLayer1Base, colLayer2Base, 1 - root.contentTransparency)
+        property color colLayer2: auroraEverywhere ? ColorUtils.transparentize(m3colors.m3surfaceContainer, 0.4) : ColorUtils.solveOverlayColor(colLayer1Base, colLayer2Base, 1 - root.contentTransparency)
         property color colLayer2Hover: ColorUtils.solveOverlayColor(colLayer1Base, ColorUtils.mix(colLayer2Base, colOnLayer2, 0.90), 1 - root.contentTransparency)
         property color colLayer2Active: ColorUtils.solveOverlayColor(colLayer1Base, ColorUtils.mix(colLayer2Base, colOnLayer2, 0.80), 1 - root.contentTransparency)
         property color colLayer2Disabled: ColorUtils.solveOverlayColor(colLayer1Base, ColorUtils.mix(colLayer2Base, m3colors.m3background, 0.8), 1 - root.contentTransparency)
-        property color colOnLayer2: root._auroraLightMode ? _inkPrimary : m3colors.m3onSurface
+        property color colOnLayer2: _needsHighContrast ? m3colors.m3onSurface : (root._auroraLightMode ? _inkPrimary : m3colors.m3onSurface) // Force Primary White
         property color colOnLayer2Disabled: root._auroraLightMode ? _inkMuted : ColorUtils.mix(colOnLayer2, m3colors.m3background, 0.4)
         // Layer 3
         property color colLayer3Base: m3colors.m3surfaceContainerHigh
-        property color colLayer3: ColorUtils.solveOverlayColor(colLayer2Base, colLayer3Base, 1 - root.contentTransparency)
+        property color colLayer3: auroraEverywhere ? ColorUtils.transparentize(m3colors.m3surfaceContainerHigh, 0.4) : ColorUtils.solveOverlayColor(colLayer2Base, colLayer3Base, 1 - root.contentTransparency)
         property color colLayer3Hover: ColorUtils.solveOverlayColor(colLayer2Base, ColorUtils.mix(colLayer3Base, colOnLayer3, 0.90), 1 - root.contentTransparency)
         property color colLayer3Active: ColorUtils.solveOverlayColor(colLayer2Base, ColorUtils.mix(colLayer3Base, colOnLayer3, 0.80), 1 - root.contentTransparency)
-        property color colOnLayer3: root._auroraLightMode ? _inkPrimary : m3colors.m3onSurface
+        property color colOnLayer3: _needsHighContrast ? m3colors.m3onSurface : (root._auroraLightMode ? _inkPrimary : m3colors.m3onSurface) // Force Primary White
         // Layer 4
         property color colLayer4Base: m3colors.m3surfaceContainerHighest
         property color colLayer4: ColorUtils.solveOverlayColor(colLayer3Base, colLayer4Base, 1 - root.contentTransparency)
@@ -237,9 +245,9 @@ Singleton {
         property color colTooltip: m3colors.m3inverseSurface
         property color colOnTooltip: m3colors.m3inverseOnSurface
         property color colScrim: ColorUtils.transparentize(m3colors.m3scrim, 0.5)
-        property color colShadow: ColorUtils.transparentize(m3colors.m3shadow, 0.7)
-        property color colOutline: m3colors.m3outline
-        property color colOutlineVariant: m3colors.m3outlineVariant
+        property color colShadow: m3colors.transparent ? "transparent" : ColorUtils.transparentize(m3colors.m3shadow, 0.7)
+        property color colOutline: _needsHighContrast ? ColorUtils.transparentize(m3colors.m3onSurface, 0.8) : m3colors.m3outline // Brighter border in Aurora Dark
+        property color colOutlineVariant: _needsHighContrast ? ColorUtils.transparentize(m3colors.m3onSurface, 0.9) : m3colors.m3outlineVariant
         property color colError: m3colors.m3error
         property color colErrorHover: ColorUtils.mix(m3colors.m3error, colLayer1Hover, 0.85)
         property color colErrorActive: ColorUtils.mix(m3colors.m3error, colLayer1Active, 0.7)
@@ -251,26 +259,41 @@ Singleton {
     }
 
     rounding: QtObject {
-        property int unsharpen: 2
-        property int unsharpenmore: 6
-        property int verysmall: 8
-        property int small: 12
-        property int normal: 17
-        property int large: 23
-        property int verylarge: 30
+        // Dynamic rounding scalar based on theme metadata
+        // Matrix -> 0, Zen Garden -> 1.5, Standard -> 1.0
+        property real scale: root._themeMeta.roundingScale ?? 1.0
+        
+        property int unsharpen: Math.max(0, Math.round(2 * scale))
+        property int unsharpenmore: Math.max(0, Math.round(6 * scale))
+        property int verysmall: Math.max(0, Math.round(8 * scale))
+        property int small: Math.max(0, Math.round(12 * scale))
+        property int normal: Math.max(0, Math.round(17 * scale))
+        property int large: Math.max(0, Math.round(23 * scale))
+        property int verylarge: Math.max(0, Math.round(30 * scale))
         property int full: 9999
         property int screenRounding: large
-        property int windowRounding: 18
+        property int windowRounding: Math.max(0, Math.round(18 * scale))
     }
 
     // Typography scale factor from config
     property real fontSizeScale: Config.options?.appearance?.typography?.sizeScale ?? 1.0
 
+    // Theme Metadata Logic
+    readonly property var activeThemePreset: ThemePresets.getPreset(Config.options.appearance.theme)
+    readonly property var _themeMeta: activeThemePreset.meta || {}
+    
+    // Font Strategy:
+    // 1. Inir style -> Always Monospace (TUI feel)
+    // 2. Theme requests mono (Matrix, Vesper) -> Monospace
+    // 3. Theme requests serif (Angel) -> Serif (if mapped)
+    // 4. Default -> Config Main Font
+    readonly property bool _forceMono: globalStyle === "inir" || _themeMeta.fontStyle === "mono"
+    
     font: QtObject {
         property QtObject family: QtObject {
-            property string main: Config.options?.appearance?.typography?.mainFont ?? "Roboto Flex"
+            property string main: root._forceMono ? monospace : (Config.options?.appearance?.typography?.mainFont ?? "Roboto Flex")
             property string numbers: "Rubik"
-            property string title: Config.options?.appearance?.typography?.titleFont ?? "Gabarito"
+            property string title: root._forceMono ? monospace : (Config.options?.appearance?.typography?.titleFont ?? "Gabarito")
             property string iconMaterial: "Material Symbols Rounded"
             property string iconNerd: "JetBrains Mono NF"
             property string monospace: Config.options?.appearance?.typography?.monospaceFont ?? "JetBrainsMono Nerd Font"
@@ -479,10 +502,10 @@ Singleton {
         // ═══════════════════════════════════════════════════════════════
         // LAYER SYSTEM
         // ═══════════════════════════════════════════════════════════════
-        readonly property color colLayer0: root.m3colors.m3background
-        readonly property color colLayer1: root.m3colors.m3surfaceContainerLow
-        readonly property color colLayer2: root.m3colors.m3surfaceContainer
-        readonly property color colLayer3: root.m3colors.m3surfaceContainerHigh
+        readonly property color colLayer0: root.m3colors.transparent ? "transparent" : root.m3colors.m3background
+        readonly property color colLayer1: root.m3colors.transparent ? "transparent" : root.m3colors.m3surfaceContainerLow
+        readonly property color colLayer2: root.m3colors.transparent ? "transparent" : root.m3colors.m3surfaceContainer
+        readonly property color colLayer3: root.m3colors.transparent ? "transparent" : root.m3colors.m3surfaceContainerHigh
         
         readonly property color colOnLayer0: root.m3colors.m3onBackground
         readonly property color colOnLayer1: root.m3colors.m3onSurface
@@ -502,6 +525,9 @@ Singleton {
         // ═══════════════════════════════════════════════════════════════
         // BORDER SYSTEM (Elegant, subtle - refined appearance)
         // ═══════════════════════════════════════════════════════════════
+        // Scale border width for themes like Matrix/Synthwave
+        readonly property real borderScale: root._themeMeta.borderWidthScale ?? 1.0
+        
         readonly property color colBorder: ColorUtils.transparentize(root.m3colors.m3outlineVariant, 0.3)
         readonly property color colBorderHover: root.m3colors.m3outlineVariant
         readonly property color colBorderAccent: ColorUtils.transparentize(root.m3colors.m3primary, 0.6)
@@ -628,3 +654,4 @@ Singleton {
 
     syntaxHighlightingTheme: root.m3colors.darkmode ? "Monokai" : "ayu Light"
 }
+
