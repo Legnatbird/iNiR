@@ -250,12 +250,12 @@ Item {
             MaterialSymbol {
                 text: btnIcon
                 iconSize: Appearance.font.pixelSize.normal
-                color: Appearance.inirEverywhere ? Appearance.inir.foreground : Appearance.colors.colOnLayer1
+                color: Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer1
             }
             StyledText {
                 text: label
                 Layout.fillWidth: true
-                color: Appearance.inirEverywhere ? Appearance.inir.foreground : Appearance.colors.colOnLayer1
+                color: Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer1
             }
             MaterialSymbol {
                 text: "chevron_right"

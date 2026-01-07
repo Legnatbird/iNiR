@@ -133,6 +133,7 @@ Variants {
         // Layer props
         screen: modelData
         exclusionMode: ExclusionMode.Ignore
+        // Only use Overlay when strictly necessary (locked and stable). Otherwise Bottom.
         WlrLayershell.layer: (GlobalStates.screenLocked && !scaleAnim.running) ? WlrLayer.Overlay : WlrLayer.Bottom
         WlrLayershell.namespace: "quickshell:background"
         anchors { top: true; bottom: true; left: true; right: true }

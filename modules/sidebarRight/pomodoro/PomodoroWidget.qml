@@ -139,7 +139,9 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             height: 1
-            color: Appearance.colors.colOutlineVariant
+            color: Appearance.inirEverywhere ? Appearance.inir.colBorder 
+                 : Appearance.auroraEverywhere ? "transparent"
+                 : Appearance.colors.colOutlineVariant
         }
 
         SwipeView {

@@ -28,7 +28,7 @@ Item {
         return "none"
     }
 
-    StyledRectangularShadow { target: card; visible: !Appearance.auroraEverywhere }
+    StyledRectangularShadow { target: card; visible: !Appearance.auroraEverywhere && !Appearance.inirEverywhere && !Appearance.gameModeMinimal }
 
     Rectangle {
         id: card
@@ -39,8 +39,8 @@ Item {
         color: Appearance.inirEverywhere ? Appearance.inir.colLayer1
              : Appearance.auroraEverywhere ? "transparent" 
              : Appearance.colors.colLayer1
-        border.width: Appearance.auroraEverywhere ? 0 : 1
-        border.color: Appearance.inirEverywhere ? Appearance.inir.colBorder : Appearance.colors.colLayer0Border
+        border.width: Appearance.inirEverywhere ? 1 : 0
+        border.color: Appearance.inirEverywhere ? Appearance.inir.colBorder : "transparent"
 
         StackLayout {
             id: stack

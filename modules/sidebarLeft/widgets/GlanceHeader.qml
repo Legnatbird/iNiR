@@ -177,7 +177,14 @@ Item {
                     colRipple: Appearance.inirEverywhere ? Appearance.inir.colLayer1Active 
                         : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurfaceActive : Appearance.colors.colLayer1Active
                     
-                    onClicked: settingsMenu.toggle()
+                    onClicked: {
+                        const isWaffle = (Config.options?.panelFamily === "waffle" && Config.options?.waffles?.settings?.useMaterialStyle !== true);
+                        const settingsPath = isWaffle ? Quickshell.shellPath("waffleSettings.qml") : Quickshell.shellPath("settings.qml");
+                        const pageIndex = isWaffle ? 6 : 5; // Modules (Waffle) vs Interface (ii)
+                        const section = isWaffle ? Translation.tr("Widgets Panel") : Translation.tr("Media player");
+                        
+                        Quickshell.execDetached(["/usr/bin/env", "QS_SETTINGS_PAGE=" + pageIndex, "QS_SETTINGS_SECTION=" + section, "/usr/bin/qs", "-n", "-p", settingsPath]);
+                    }
 
                     contentItem: Item {
                         MaterialSymbol {
@@ -190,11 +197,6 @@ Item {
                     }
 
                     StyledToolTip { text: Translation.tr("Manage Widgets") }
-                }
-
-                WidgetSettingsMenu {
-                    id: settingsMenu
-                    anchorItem: settingsBtn
                 }
             }
         }

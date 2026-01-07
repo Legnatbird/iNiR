@@ -19,6 +19,12 @@ Singleton {
     // Get icon path from dock theme, fallback to system
     function dockIconPath(iconName: string, fallback: string): string {
         if (!iconName) return Quickshell.iconPath(fallback || "application-x-executable")
+        
+        // If iconName is already an absolute path, use it directly
+        if (iconName.startsWith("/") || iconName.startsWith("file://")) {
+            return iconName.startsWith("file://") ? iconName : `file://${iconName}`
+        }
+        
         if (!root.dockTheme) return Quickshell.iconPath(iconName, fallback || "application-x-executable")
         
         const home = Quickshell.env("HOME")
@@ -32,6 +38,11 @@ Singleton {
     // Get all candidate paths for dock icon
     function dockIconCandidates(iconName: string): list<string> {
         if (!iconName || !root.dockTheme) return []
+        
+        // If iconName is already an absolute path, return it as-is (no candidates needed)
+        if (iconName.startsWith("/") || iconName.startsWith("file://")) {
+            return []
+        }
         
         const home = Quickshell.env("HOME")
         const theme = root.dockTheme

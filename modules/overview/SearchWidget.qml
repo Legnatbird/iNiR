@@ -507,6 +507,17 @@ Item { // Wrapper
                         root.prefixShellCommand,
                         root.prefixWebSearch
                     ])
+
+                    Keys.onPressed: event => {
+                        if (event.key === Qt.Key_Tab) {
+                            if (model.values.length === 0)
+                                return;
+                            const tabbedText = searchItem.entry.name;
+                            root.setSearchingText(tabbedText);
+                            event.accepted = true;
+                            root.focusSearchInput();
+                        }
+                    }
                 }
             }
         }

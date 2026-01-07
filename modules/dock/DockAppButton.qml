@@ -242,10 +242,17 @@ DockButton {
                         }
                         return root.desktopEntry?.icon || AppSearch.guessIcon(appId);
                     }
-                    property var candidates: IconThemeService.dockIconCandidates(iconName)
+                    // Don't generate candidates if iconName is already an absolute path
+                    property bool isAbsolutePath: iconName.startsWith("/") || iconName.startsWith("file://")
+                    property var candidates: isAbsolutePath ? [] : IconThemeService.dockIconCandidates(iconName)
                     property int candidateIndex: 0
                     
-                    source: candidates.length > 0 ? candidates[0] : Quickshell.iconPath(iconName, "image-missing")
+                    source: {
+                        if (isAbsolutePath) {
+                            return iconName.startsWith("file://") ? iconName : `file://${iconName}`
+                        }
+                        return candidates.length > 0 ? candidates[0] : Quickshell.iconPath(iconName, "image-missing")
+                    }
                     implicitSize: root.iconSize
                     
                     onStatusChanged: {
