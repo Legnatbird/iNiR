@@ -2,18 +2,31 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Services.UPower
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.functions
 import qs.services
 import "root:"
 
 Item {
     id: root
 
-    // Local state for niri toggles (not exposed via IPC)
+    // Local state for niri toggles
     property bool _debugTint: false
     property bool _showDamage: false
     property bool _opaqueRegions: false
+
+    // Style tokens
+    readonly property color colText: Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer1
+    readonly property color colTextSecondary: Appearance.inirEverywhere ? Appearance.inir.colTextSecondary : Appearance.colors.colSubtext
+    readonly property color colBg: Appearance.inirEverywhere ? Appearance.inir.colLayer1
+        : Appearance.auroraEverywhere ? "transparent"
+        : Appearance.colors.colLayer1
+    readonly property color colBgHover: Appearance.inirEverywhere ? Appearance.inir.colLayer1Hover
+        : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
+        : Appearance.colors.colLayer1Hover
+    readonly property real radius: Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.verysmall
 
     Flickable {
         id: flickable
@@ -26,7 +39,38 @@ Item {
         ColumnLayout {
             id: mainColumn
             width: flickable.width
-            spacing: 16
+            spacing: 12
+
+            // === Power Profiles ===
+            CollapsibleSection {
+                title: Translation.tr("Power Profile")
+                icon: "bolt"
+                expanded: true
+                enableSettingsSearch: false
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.margins: 4
+                    spacing: 4
+
+                    PowerProfileButton {
+                        profile: PowerProfile.PowerSaver
+                        profileIcon: "energy_savings_leaf"
+                        label: Translation.tr("Saver")
+                    }
+                    PowerProfileButton {
+                        profile: PowerProfile.Balanced
+                        profileIcon: "balance"
+                        label: Translation.tr("Balanced")
+                    }
+                    PowerProfileButton {
+                        profile: PowerProfile.Performance
+                        profileIcon: "local_fire_department"
+                        label: Translation.tr("Performance")
+                        enabled: PowerProfiles.hasPerformanceProfile
+                    }
+                }
+            }
 
             // === Quick Toggles ===
             CollapsibleSection {
@@ -77,30 +121,88 @@ Item {
                 expanded: true
                 enableSettingsSearch: false
 
-                ActionButton {
-                    btnIcon: "screenshot"
-                    label: Translation.tr("Screenshot")
-                    onClicked: Quickshell.execDetached(["niri", "msg", "action", "screenshot"])
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: 2
+                    rowSpacing: 4
+                    columnSpacing: 4
+
+                    ActionTile {
+                        tileIcon: "screenshot"
+                        label: Translation.tr("Screenshot")
+                        onClicked: Quickshell.execDetached(["niri", "msg", "action", "screenshot"])
+                    }
+                    ActionTile {
+                        tileIcon: "screenshot_region"
+                        label: Translation.tr("Region")
+                        onClicked: Quickshell.execDetached(["/usr/bin/qs", "-c", "ii", "ipc", "call", "region", "screenshot"])
+                    }
+                    ActionTile {
+                        tileIcon: "videocam"
+                        label: Translation.tr("Record")
+                        onClicked: Quickshell.execDetached(["/usr/bin/qs", "-c", "ii", "ipc", "call", "region", "record"])
+                    }
+                    ActionTile {
+                        tileIcon: "text_fields"
+                        label: Translation.tr("OCR")
+                        onClicked: Quickshell.execDetached(["/usr/bin/qs", "-c", "ii", "ipc", "call", "region", "ocr"])
+                    }
+                    ActionTile {
+                        tileIcon: "colorize"
+                        label: Translation.tr("Color")
+                        onClicked: Quickshell.execDetached(["niri", "msg", "action", "pick-color"])
+                    }
+                    ActionTile {
+                        tileIcon: "screenshot_monitor"
+                        label: Translation.tr("Window")
+                        onClicked: Quickshell.execDetached(["niri", "msg", "action", "screenshot-window"])
+                    }
                 }
-                ActionButton {
-                    btnIcon: "screenshot_region"
-                    label: Translation.tr("Region screenshot")
-                    onClicked: Quickshell.execDetached(["/usr/bin/qs", "-c", "ii", "ipc", "call", "region", "screenshot"])
-                }
-                ActionButton {
-                    btnIcon: "videocam"
-                    label: Translation.tr("Screen record")
-                    onClicked: Quickshell.execDetached(["/usr/bin/qs", "-c", "ii", "ipc", "call", "region", "record"])
-                }
-                ActionButton {
-                    btnIcon: "text_fields"
-                    label: Translation.tr("OCR (text recognition)")
-                    onClicked: Quickshell.execDetached(["/usr/bin/qs", "-c", "ii", "ipc", "call", "region", "ocr"])
-                }
-                ActionButton {
-                    btnIcon: "colorize"
-                    label: Translation.tr("Color picker")
-                    onClicked: Quickshell.execDetached(["niri", "msg", "action", "pick-color"])
+            }
+
+            // === Quick Launch ===
+            CollapsibleSection {
+                title: Translation.tr("Quick Launch")
+                icon: "rocket_launch"
+                expanded: false
+                enableSettingsSearch: false
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: 3
+                    rowSpacing: 4
+                    columnSpacing: 4
+
+                    ActionTile {
+                        tileIcon: "terminal"
+                        label: Translation.tr("Terminal")
+                        onClicked: Quickshell.execDetached([Config.options?.apps?.terminal ?? "/usr/bin/foot"])
+                    }
+                    ActionTile {
+                        tileIcon: "folder"
+                        label: Translation.tr("Files")
+                        onClicked: Quickshell.execDetached(["/usr/bin/nautilus"])
+                    }
+                    ActionTile {
+                        tileIcon: "settings"
+                        label: Translation.tr("Settings")
+                        onClicked: Quickshell.execDetached(["/usr/bin/qs", "-c", "ii", "ipc", "call", "settings", "open"])
+                    }
+                    ActionTile {
+                        tileIcon: "tune"
+                        label: Translation.tr("Audio")
+                        onClicked: Quickshell.execDetached([Config.options?.apps?.volumeMixer ?? "/usr/bin/pavucontrol"])
+                    }
+                    ActionTile {
+                        tileIcon: "language"
+                        label: Translation.tr("Browser")
+                        onClicked: Quickshell.execDetached([Config.options?.apps?.browser ?? "/usr/bin/firefox"])
+                    }
+                    ActionTile {
+                        tileIcon: "code"
+                        label: Translation.tr("Editor")
+                        onClicked: Quickshell.execDetached([Config.options?.apps?.editor ?? "/usr/bin/code"])
+                    }
                 }
             }
 
@@ -113,42 +215,13 @@ Item {
 
                 ActionButton {
                     btnIcon: "assignment"
-                    label: Translation.tr("Open clipboard")
+                    label: Translation.tr("Open clipboard manager")
                     onClicked: GlobalStates.clipboardOpen = true
                 }
                 ActionButton {
                     btnIcon: "delete_sweep"
                     label: Translation.tr("Clear clipboard history")
                     onClicked: Cliphist.wipe()
-                }
-            }
-
-            // === Quick Launch ===
-            CollapsibleSection {
-                title: Translation.tr("Quick Launch")
-                icon: "rocket_launch"
-                expanded: false
-                enableSettingsSearch: false
-
-                ActionButton {
-                    btnIcon: "terminal"
-                    label: Translation.tr("Terminal")
-                    onClicked: Quickshell.execDetached([Config.options?.apps?.terminal ?? "/usr/bin/foot"])
-                }
-                ActionButton {
-                    btnIcon: "folder"
-                    label: Translation.tr("File manager")
-                    onClicked: Quickshell.execDetached(["/usr/bin/nautilus"])
-                }
-                ActionButton {
-                    btnIcon: "settings"
-                    label: Translation.tr("Settings")
-                    onClicked: Quickshell.execDetached(["/usr/bin/qs", "-c", "ii", "ipc", "call", "settings", "open"])
-                }
-                ActionButton {
-                    btnIcon: "tune"
-                    label: Translation.tr("Volume mixer")
-                    onClicked: Quickshell.execDetached([Config.options?.apps?.volumeMixer ?? "/usr/bin/pavucontrol"])
                 }
             }
 
@@ -223,23 +296,119 @@ Item {
                 }
             }
 
+            // === System ===
+            CollapsibleSection {
+                title: Translation.tr("System")
+                icon: "computer"
+                expanded: false
+                enableSettingsSearch: false
+
+                ActionButton {
+                    btnIcon: "system_update"
+                    label: Translation.tr("Check for updates")
+                    onClicked: Quickshell.execDetached([Config.options?.apps?.terminal ?? "/usr/bin/foot", "-e", "fish", "-c", "yay -Syu; read -P 'Press Enter to close...'"])
+                }
+                ActionButton {
+                    btnIcon: "cleaning_services"
+                    label: Translation.tr("Clean package cache")
+                    onClicked: Quickshell.execDetached([Config.options?.apps?.terminal ?? "/usr/bin/foot", "-e", "fish", "-c", "sudo paccache -rk1; read -P 'Press Enter to close...'"])
+                }
+                ActionButton {
+                    btnIcon: "info"
+                    label: Translation.tr("System info")
+                    onClicked: Quickshell.execDetached([Config.options?.apps?.terminal ?? "/usr/bin/foot", "-e", "fish", "-c", "fastfetch; read -P 'Press Enter to close...'"])
+                }
+            }
+
             Item { Layout.preferredHeight: 8 }
         }
     }
 
-    // === Action Button Component ===
+    // ═══════════════════════════════════════════
+    // INLINE COMPONENTS
+    // ═══════════════════════════════════════════
+
+    component PowerProfileButton: RippleButton {
+        required property int profile
+        required property string profileIcon
+        required property string label
+
+        Layout.fillWidth: true
+        implicitHeight: 56
+        buttonRadius: root.radius
+
+        readonly property bool isActive: PowerProfiles.profile === profile
+
+        colBackground: isActive ? Appearance.colors.colPrimary : root.colBg
+        colBackgroundHover: isActive ? Appearance.colors.colPrimaryHover : root.colBgHover
+
+        onClicked: PowerProfiles.profile = profile
+
+        contentItem: ColumnLayout {
+            anchors.centerIn: parent
+            spacing: 2
+
+            MaterialSymbol {
+                Layout.alignment: Qt.AlignHCenter
+                text: profileIcon
+                iconSize: 20
+                fill: isActive ? 1 : 0
+                color: isActive ? Appearance.colors.colOnPrimary : root.colText
+            }
+            StyledText {
+                Layout.alignment: Qt.AlignHCenter
+                text: label
+                font.pixelSize: Appearance.font.pixelSize.smallest
+                color: isActive ? Appearance.colors.colOnPrimary : root.colTextSecondary
+            }
+        }
+
+        StyledToolTip {
+            text: label + (isActive ? " (" + Translation.tr("Active") + ")" : "")
+        }
+    }
+
+    component ActionTile: RippleButton {
+        property string tileIcon: ""
+        property string label: ""
+
+        Layout.fillWidth: true
+        implicitHeight: 56
+        buttonRadius: root.radius
+
+        colBackground: root.colBg
+        colBackgroundHover: root.colBgHover
+
+        contentItem: ColumnLayout {
+            anchors.centerIn: parent
+            spacing: 2
+
+            MaterialSymbol {
+                Layout.alignment: Qt.AlignHCenter
+                text: tileIcon
+                iconSize: 20
+                color: root.colText
+            }
+            StyledText {
+                Layout.alignment: Qt.AlignHCenter
+                text: label
+                font.pixelSize: Appearance.font.pixelSize.smallest
+                color: root.colTextSecondary
+                elide: Text.ElideRight
+            }
+        }
+    }
+
     component ActionButton: RippleButton {
         property string btnIcon: ""
         property string label: ""
 
         Layout.fillWidth: true
         implicitHeight: 40
-        buttonRadius: Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.verysmall
+        buttonRadius: root.radius
 
         colBackground: "transparent"
-        colBackgroundHover: Appearance.inirEverywhere ? Appearance.inir.colLayer1Hover
-                         : Appearance.auroraEverywhere ? Appearance.aurora.colSubSurface
-                         : Appearance.colors.colLayer1Hover
+        colBackgroundHover: root.colBgHover
 
         contentItem: RowLayout {
             anchors.fill: parent
@@ -250,17 +419,17 @@ Item {
             MaterialSymbol {
                 text: btnIcon
                 iconSize: Appearance.font.pixelSize.normal
-                color: Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer1
+                color: root.colText
             }
             StyledText {
                 text: label
                 Layout.fillWidth: true
-                color: Appearance.inirEverywhere ? Appearance.inir.colText : Appearance.colors.colOnLayer1
+                color: root.colText
             }
             MaterialSymbol {
                 text: "chevron_right"
                 iconSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colSubtext
+                color: root.colTextSecondary
             }
         }
     }

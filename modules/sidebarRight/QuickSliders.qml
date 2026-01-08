@@ -58,8 +58,10 @@ Rectangle {
             sourceComponent: QuickSlider {
                 materialSymbol: "volume_up"
                 modelValue: Audio.sink?.audio?.volume ?? 0
-                to: Audio.uiMaxSinkVolume
-                onMoved: Audio.setSinkVolume(value)
+                onMoved: {
+                    if (Audio.sink?.audio)
+                        Audio.sink.audio.volume = value
+                }
             }
         }
 

@@ -56,14 +56,15 @@ Item {
     readonly property real radius: Appearance.inirEverywhere ? Appearance.inir.roundingNormal : Appearance.rounding.normal
     readonly property real radiusSmall: Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.small
 
-    // Cava visualizer
+    // Cava visualizer - optimized with conditional running
     Process {
         id: cavaProc
-        running: root.visible && root.isPlaying && GlobalStates.sidebarLeftOpen
+        running: root.visible && root.isPlaying && GlobalStates.sidebarLeftOpen && Appearance.effectsEnabled
         onRunningChanged: { if (!running) root.visualizerPoints = [] }
         command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
         stdout: SplitParser {
             onRead: data => {
+                if (!root.isPlaying) return // Skip processing if not playing
                 root.visualizerPoints = data.split(";").map(p => parseFloat(p.trim())).filter(p => !isNaN(p))
             }
         }
@@ -111,17 +112,31 @@ Item {
             }
         }
 
-        // Visualizer
+        // Visualizer - only render when effects enabled
         WaveVisualizer {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             height: 25
+            visible: Appearance.effectsEnabled
             live: root.isPlaying
             points: root.visualizerPoints
             maxVisualizerValue: 1000
             smoothing: 2
             color: ColorUtils.transparentize(root.colPrimary, 0.6)
+        }
+
+        // Fallback gradient when effects disabled
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 25
+            visible: !Appearance.effectsEnabled && root.isPlaying
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: "transparent" }
+                GradientStop { position: 1.0; color: ColorUtils.transparentize(root.colPrimary, 0.7) }
+            }
         }
 
         RowLayout {
