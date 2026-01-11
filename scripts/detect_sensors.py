@@ -47,6 +47,10 @@ def find_best_temp_input(hwmon_path):
             score = 10
         elif "core" in label:
             score = 5  # Specific cores are less useful than package
+        elif "cpu" in label:
+            score = 8  # Generic CPU label
+        elif "temp" in label or label == "":
+            score = 2  # Generic temp, better than nothing
 
         # Sanity check: ensure the file is readable and has a valid value
         try:
@@ -90,19 +94,37 @@ def detect():
         if not best_input:
             continue
 
-        # CPU Detection
-        # k10temp/zenpower: AMD
-        # coretemp: Intel
-        # cpu_thermal: RPi/ARM
-        # fam15h_power: Old AMD
-        if name in [
-            "coretemp",
-            "k10temp",
-            "zenpower",
-            "cpu_thermal",
-            "fam15h_power",
-            "asus_ec",
-        ]:
+        # CPU Detection - Extended list for older/various hardware
+        # Intel: coretemp
+        # AMD: k10temp, zenpower, fam15h_power
+        # ARM: cpu_thermal
+        # Laptops: thinkpad, dell_smm, hp_wmi, asus_ec, applesmc
+        # Generic/Legacy: acpitz, it87, nct6775, w83627ehf, lm75, lm78, lm85
+        cpu_sensors = [
+            "coretemp",      # Intel Core (most common)
+            "k10temp",       # AMD K10+
+            "zenpower",      # AMD Zen
+            "cpu_thermal",   # ARM/RPi
+            "fam15h_power",  # Old AMD
+            "acpitz",        # ACPI thermal (generic fallback)
+            "thinkpad",      # ThinkPad EC
+            "dell_smm",      # Dell laptops
+            "hp_wmi",        # HP laptops
+            "asus_ec",       # ASUS EC
+            "applesmc",      # Apple SMC
+            "it87",          # ITE Super I/O
+            "nct6775",       # Nuvoton Super I/O
+            "w83627ehf",     # Winbond Super I/O
+            "lm75",          # Legacy I2C sensor
+            "lm78",          # Legacy I2C sensor
+            "lm85",          # Legacy I2C sensor
+            "via_cputemp",   # VIA CPUs
+            "pch_cannonlake", # Intel PCH
+            "pch_skylake",   # Intel PCH
+            "iwlwifi_1",     # Sometimes reports CPU-adjacent temps
+        ]
+
+        if name in cpu_sensors:
             # If we already found a CPU path, only replace it if the new one is "better" (e.g. Package vs Core)
             # But simpler logic: first "Package" or "Tdie" wins.
             if not cpu_path:
@@ -112,8 +134,21 @@ def detect():
             ):
                 cpu_path = best_input  # Upgrade to package if we had something else
 
-        # GPU Detection
-        if name in ["amdgpu", "radeon", "nouveau", "nvidia", "i915"]:
+        # GPU Detection - Extended list
+        gpu_sensors = [
+            "amdgpu",        # AMD GPU
+            "radeon",        # AMD legacy GPU
+            "nouveau",       # NVIDIA open source
+            "nvidia",        # NVIDIA proprietary
+            "i915",          # Intel integrated GPU
+            "xe",            # Intel Xe GPU
+            "panfrost",      # ARM Mali
+            "lima",          # ARM Mali (older)
+            "v3d",           # Broadcom VideoCore
+            "vc4",           # Broadcom VideoCore
+        ]
+
+        if name in gpu_sensors:
             if not gpu_path:
                 gpu_path = best_input
 
@@ -126,11 +161,28 @@ def detect():
             if not os.path.exists(temp_path):
                 continue
 
-            # Avoid redundant checks if we already have paths
-            if not cpu_path and any(x in tz_type for x in ["cpu", "x86_pkg_temp"]):
+            # Verify the temp file is readable and has valid data
+            try:
+                val = int(get_content(temp_path))
+                if val <= 0:
+                    continue
+            except:
+                continue
+
+            # CPU thermal zones - extended patterns
+            cpu_tz_patterns = [
+                "cpu", "x86_pkg_temp", "acpitz", "soc",
+                "core", "package", "processor", "int3400",
+                "pch", "b0d4"  # Intel PCH patterns
+            ]
+
+            # GPU thermal zones
+            gpu_tz_patterns = ["gpu", "radeon", "amdgpu", "nvidia"]
+
+            if not cpu_path and any(x in tz_type for x in cpu_tz_patterns):
                 cpu_path = temp_path
 
-            if not gpu_path and any(x in tz_type for x in ["gpu"]):
+            if not gpu_path and any(x in tz_type for x in gpu_tz_patterns):
                 gpu_path = temp_path
 
     # Output results compatible with QML SplitParser
