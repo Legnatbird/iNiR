@@ -107,7 +107,13 @@ Rectangle {
                 rightMargin: nearFull ? 14 : 8
             }
             iconSize: 20
-            color: nearFull ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+            color: nearFull
+                ? (Appearance.inirEverywhere ? Appearance.inir.colOnPrimary
+                 : Appearance.auroraEverywhere ? Appearance.m3colors.m3onPrimary
+                 : Appearance.colors.colOnPrimary)
+                : (Appearance.inirEverywhere ? Appearance.inir.colOnSecondaryContainer
+                 : Appearance.auroraEverywhere ? Appearance.m3colors.m3onSecondaryContainer
+                 : Appearance.colors.colOnSecondaryContainer)
             text: quickSlider.materialSymbol
 
             Behavior on color {

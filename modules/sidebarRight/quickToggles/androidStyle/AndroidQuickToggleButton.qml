@@ -74,11 +74,15 @@ GroupButton {
         ? Appearance.inir.roundingSmall 
         : (toggled ? Appearance.rounding.large : baseHeight / 2)
     buttonRadiusPressed: Appearance.inirEverywhere ? Appearance.inir.roundingSmall : Appearance.rounding.normal
-    property color colText: Appearance.inirEverywhere 
+    property color colText: Appearance.inirEverywhere
         ? (toggled ? Appearance.inir.colOnPrimaryContainer : Appearance.inir.colText)
+        : Appearance.auroraEverywhere
+        ? (toggled ? Appearance.m3colors.m3onPrimary : Appearance.m3colors.m3onSurface)
         : toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
-    property color colIcon: Appearance.inirEverywhere 
+    property color colIcon: Appearance.inirEverywhere
         ? (toggled ? Appearance.inir.colOnPrimaryContainer : Appearance.inir.colText)
+        : Appearance.auroraEverywhere
+        ? (toggled ? Appearance.m3colors.m3onPrimary : Appearance.m3colors.m3onSurface)
         : toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
 
     onClicked: {
