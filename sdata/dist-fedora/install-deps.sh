@@ -439,6 +439,61 @@ if ! fc-list | grep -qi "JetBrainsMono Nerd"; then
 fi
 
 #####################################################################################
+# Icon themes (WhiteSur, MacTahoe)
+#####################################################################################
+echo -e "${STY_CYAN}[$0]: Installing icon themes...${STY_RST}"
+
+ICON_DIR="$HOME/.local/share/icons"
+mkdir -p "$ICON_DIR"
+
+# WhiteSur icon theme
+if [[ ! -d "$ICON_DIR/WhiteSur-dark" ]]; then
+  echo -e "${STY_BLUE}[$0]: Installing WhiteSur icon theme...${STY_RST}"
+  
+  TEMP_DIR="/tmp/whitesur-icons-$$"
+  mkdir -p "$TEMP_DIR"
+  
+  if curl -fsSL -o "$TEMP_DIR/whitesur.tar.gz" \
+    "https://github.com/vinceliuice/WhiteSur-icon-theme/archive/refs/heads/master.tar.gz"; then
+    tar -xzf "$TEMP_DIR/whitesur.tar.gz" -C "$TEMP_DIR"
+    cd "$TEMP_DIR/WhiteSur-icon-theme-master"
+    ./install.sh -d "$ICON_DIR" -t default >/dev/null 2>&1 || {
+      # Fallback: manual copy
+      cp -r src/WhiteSur "$ICON_DIR/WhiteSur-dark" 2>/dev/null || true
+    }
+    cd - >/dev/null
+    echo -e "${STY_GREEN}[$0]: WhiteSur icon theme installed.${STY_RST}"
+  else
+    echo -e "${STY_YELLOW}[$0]: Could not download WhiteSur icon theme.${STY_RST}"
+  fi
+  
+  rm -rf "$TEMP_DIR"
+fi
+
+# MacTahoe icon theme (for dock)
+if [[ ! -d "$ICON_DIR/MacTahoe" ]]; then
+  echo -e "${STY_BLUE}[$0]: Installing MacTahoe icon theme...${STY_RST}"
+  
+  TEMP_DIR="/tmp/mactahoe-icons-$$"
+  mkdir -p "$TEMP_DIR"
+  
+  if curl -fsSL -o "$TEMP_DIR/mactahoe.tar.gz" \
+    "https://github.com/nicholasballin/MacTahoe/archive/refs/heads/main.tar.gz"; then
+    tar -xzf "$TEMP_DIR/mactahoe.tar.gz" -C "$TEMP_DIR"
+    cp -r "$TEMP_DIR/MacTahoe-main" "$ICON_DIR/MacTahoe"
+    echo -e "${STY_GREEN}[$0]: MacTahoe icon theme installed.${STY_RST}"
+  else
+    echo -e "${STY_YELLOW}[$0]: Could not download MacTahoe icon theme.${STY_RST}"
+  fi
+  
+  rm -rf "$TEMP_DIR"
+fi
+
+# Update icon cache
+gtk-update-icon-cache "$ICON_DIR/WhiteSur-dark" 2>/dev/null || true
+gtk-update-icon-cache "$ICON_DIR/MacTahoe" 2>/dev/null || true
+
+#####################################################################################
 # Python environment setup
 #####################################################################################
 showfun install-python-packages
