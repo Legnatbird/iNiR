@@ -487,20 +487,45 @@ if ! command -v niri &>/dev/null; then
   if ! command -v niri &>/dev/null; then
     echo -e "${STY_YELLOW}[$0]: Niri must be compiled from source.${STY_RST}"
   
-    # Install Niri build dependencies
+    # Install Niri build dependencies (from official niri wiki)
+    # https://github.com/YaLTeR/niri/wiki/Getting-Started
     echo -e "${STY_BLUE}[$0]: Installing Niri build dependencies...${STY_RST}"
-    sudo apt install $installflags \
-      libgbm-dev \
-      libseat-dev \
-      libinput-dev \
-      libudev-dev \
-      libxkbcommon-dev \
-      libpango1.0-dev \
-      libdbus-1-dev \
-      libsystemd-dev \
-      libpipewire-0.3-dev \
-      libdisplay-info-dev \
-      clang 2>/dev/null || true
+    
+    NIRI_BUILD_DEPS=(
+      gcc
+      clang
+      libudev-dev
+      libgbm-dev
+      libxkbcommon-dev
+      libegl1-mesa-dev
+      libwayland-dev
+      libinput-dev
+      libdbus-1-dev
+      libsystemd-dev
+      libseat-dev
+      libpipewire-0.3-dev
+      libpango1.0-dev
+    )
+    
+    # libdisplay-info-dev: available in trixie/sid and Ubuntu 24.04+, backports for bookworm
+    if apt-cache show libdisplay-info-dev &>/dev/null 2>&1; then
+      NIRI_BUILD_DEPS+=(libdisplay-info-dev)
+    else
+      echo -e "${STY_YELLOW}[$0]: libdisplay-info-dev not in repos, trying backports...${STY_RST}"
+      # Try to enable backports for bookworm
+      if $IS_DEBIAN && [[ "$DEBIAN_VERSION" == 12* ]]; then
+        echo "deb http://deb.debian.org/debian bookworm-backports main" | sudo tee /etc/apt/sources.list.d/backports.list
+        sudo apt update
+        sudo apt install -t bookworm-backports libdisplay-info-dev 2>/dev/null || true
+      fi
+    fi
+    
+    sudo apt install $installflags "${NIRI_BUILD_DEPS[@]}" 2>/dev/null || {
+      echo -e "${STY_YELLOW}[$0]: Some niri deps failed, trying individually...${STY_RST}"
+      for pkg in "${NIRI_BUILD_DEPS[@]}"; do
+        sudo apt install $installflags "$pkg" 2>/dev/null || true
+      done
+    }
     
     NIRI_BUILD_DIR="/tmp/niri-build-$$"
     
@@ -532,6 +557,15 @@ fi
 #####################################################################################
 if ! command -v xwayland-satellite &>/dev/null; then
   echo -e "${STY_BLUE}[$0]: Installing xwayland-satellite...${STY_RST}"
+  
+  # Install xwayland-satellite build dependencies
+  sudo apt install $installflags \
+    libxcb1-dev \
+    libxcb-composite0-dev \
+    libxcb-render0-dev \
+    libxcb-xfixes0-dev \
+    libclang-dev 2>/dev/null || true
+  
   # xwayland-satellite is not on crates.io, must compile from source
   XWSAT_BUILD_DIR="/tmp/xwayland-satellite-build-$$"
   if git clone https://github.com/Supreeeme/xwayland-satellite.git "$XWSAT_BUILD_DIR"; then
@@ -555,17 +589,72 @@ echo -e "${STY_CYAN}[$0]: Installing Quickshell...${STY_RST}"
 if ! command -v qs &>/dev/null; then
   echo -e "${STY_YELLOW}[$0]: Quickshell must be compiled from source.${STY_RST}"
   
-  # Install additional build dependencies
+  # Install Quickshell build dependencies (from official BUILD.md)
+  # https://github.com/quickshell-mirror/quickshell/blob/master/BUILD.md
   echo -e "${STY_BLUE}[$0]: Installing Quickshell build dependencies...${STY_RST}"
-  sudo apt install $installflags \
-    libpam0g-dev \
-    qt6-base-private-dev \
-    qt6-declarative-private-dev \
-    qt6-shader-baker \
-    qt6-wayland-dev 2>/dev/null || true
-  # Try alternative package names for Qt6 ShaderTools
-  sudo apt install $installflags qt6-shadertools-dev 2>/dev/null || \
-    sudo apt install $installflags libqt6shadertools6-dev 2>/dev/null || true
+  
+  # Base dependencies (always required)
+  QUICKSHELL_BASE_DEPS=(
+    cmake
+    ninja-build
+    pkg-config
+    spirv-tools
+    # Qt6 core
+    qt6-base-dev
+    qt6-base-private-dev
+    qt6-declarative-dev
+    qt6-declarative-private-dev
+    libqt6svg6-dev
+    # Wayland support
+    qt6-wayland-dev
+    libwayland-dev
+    wayland-protocols
+    # Optional but recommended
+    libjemalloc-dev
+    libpipewire-0.3-dev
+    libpam0g-dev
+    libdrm-dev
+    libgbm-dev
+    libxcb1-dev
+  )
+  
+  # qt6-wayland-private-dev: only in trixie/sid, not bookworm
+  if apt-cache show qt6-wayland-private-dev &>/dev/null 2>&1; then
+    QUICKSHELL_BASE_DEPS+=(qt6-wayland-private-dev)
+  fi
+  
+  # Qt6 ShaderTools - package name varies by distro/version
+  # trixie/sid: qt6-shadertools-dev
+  # bookworm: libqt6shadertools6-dev (may not exist)
+  # Ubuntu 24.04+: qt6-shadertools-dev
+  SHADERTOOLS_INSTALLED=false
+  for pkg in qt6-shadertools-dev libqt6shadertools6-dev; do
+    if apt-cache show "$pkg" &>/dev/null 2>&1; then
+      QUICKSHELL_BASE_DEPS+=("$pkg")
+      SHADERTOOLS_INSTALLED=true
+      break
+    fi
+  done
+  
+  if ! $SHADERTOOLS_INSTALLED; then
+    echo -e "${STY_YELLOW}[$0]: Qt6 ShaderTools not found in repos - Quickshell may fail to build${STY_RST}"
+    echo -e "${STY_YELLOW}[$0]: Consider upgrading to Debian trixie/sid or Ubuntu 24.04+${STY_RST}"
+  fi
+  
+  # cli11 - header-only library, package name varies
+  for pkg in libcli11-dev cli11-dev; do
+    if apt-cache show "$pkg" &>/dev/null 2>&1; then
+      QUICKSHELL_BASE_DEPS+=("$pkg")
+      break
+    fi
+  done
+  
+  sudo apt install $installflags "${QUICKSHELL_BASE_DEPS[@]}" 2>/dev/null || {
+    echo -e "${STY_YELLOW}[$0]: Some quickshell deps failed, trying individually...${STY_RST}"
+    for pkg in "${QUICKSHELL_BASE_DEPS[@]}"; do
+      sudo apt install $installflags "$pkg" 2>/dev/null || true
+    done
+  }
   
   QUICKSHELL_BUILD_DIR="/tmp/quickshell-build-$$"
   
