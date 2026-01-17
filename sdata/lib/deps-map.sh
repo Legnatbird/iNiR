@@ -42,8 +42,8 @@ declare -A AUR_HELPER_CMD=(
 ###############################################################################
 
 # Quickshell - the shell framework itself
-# This is the most critical and hardest to get on non-Arch
-DEPS_CRITICAL_QUICKSHELL="arch:AUR:quickshell-git fedora:COMPILE:https://github.com/quickshell-mirror/quickshell debian:COMPILE:https://github.com/quickshell-mirror/quickshell opensuse:COMPILE:https://github.com/quickshell-mirror/quickshell void:COMPILE:https://github.com/quickshell-mirror/quickshell"
+# NOW IN OFFICIAL ARCH REPOS! Fedora has COPR. Others need to compile.
+DEPS_CRITICAL_QUICKSHELL="arch:quickshell fedora:COPR:errornointernet/quickshell debian:COMPILE:https://github.com/quickshell-mirror/quickshell ubuntu:COMPILE:https://github.com/quickshell-mirror/quickshell opensuse:COMPILE:https://github.com/quickshell-mirror/quickshell void:COMPILE:https://github.com/quickshell-mirror/quickshell"
 
 # Niri compositor
 DEPS_CRITICAL_NIRI="arch:niri fedora:COPR:yalter/niri debian:COMPILE:https://github.com/YaLTeR/niri opensuse:COMPILE:https://github.com/YaLTeR/niri void:niri"
@@ -75,7 +75,8 @@ DEPS_CORE_BC="arch:bc fedora:bc debian:bc ubuntu:bc opensuse:bc void:bc"
 # Wayland utilities
 ###############################################################################
 DEPS_WAYLAND_WLCLIPBOARD="arch:wl-clipboard fedora:wl-clipboard debian:wl-clipboard ubuntu:wl-clipboard opensuse:wl-clipboard void:wl-clipboard"
-DEPS_WAYLAND_CLIPHIST="arch:cliphist fedora:cliphist debian:COMPILE:https://github.com/sentriz/cliphist ubuntu:COMPILE:https://github.com/sentriz/cliphist opensuse:cliphist void:cliphist"
+# cliphist is in official Arch repos, Fedora/Debian use GitHub binary releases
+DEPS_WAYLAND_CLIPHIST="arch:cliphist fedora:GITHUB:sentriz/cliphist debian:GITHUB:sentriz/cliphist ubuntu:GITHUB:sentriz/cliphist opensuse:cliphist void:cliphist"
 DEPS_WAYLAND_GRIM="arch:grim fedora:grim debian:grim ubuntu:grim opensuse:grim void:grim"
 DEPS_WAYLAND_SLURP="arch:slurp fedora:slurp debian:slurp ubuntu:slurp opensuse:slurp void:slurp"
 DEPS_WAYLAND_SWAPPY="arch:swappy fedora:swappy debian:swappy ubuntu:swappy opensuse:swappy void:swappy"
@@ -188,7 +189,7 @@ get_pkg_name() {
 }
 
 # Check if package requires special handling
-# Returns: "normal", "aur", "copr", "cargo", "compile", "flatpak", or "unavailable"
+# Returns: "normal", "aur", "copr", "cargo", "compile", "flatpak", "github", or "unavailable"
 get_pkg_type() {
     local pkg="$1"
     
@@ -198,6 +199,7 @@ get_pkg_type() {
         CARGO:*) echo "cargo" ;;
         COMPILE:*) echo "compile" ;;
         FLATPAK:*) echo "flatpak" ;;
+        GITHUB:*) echo "github" ;;
         -) echo "unavailable" ;;
         "") echo "unavailable" ;;
         *) echo "normal" ;;
@@ -282,6 +284,14 @@ install_package() {
         compile)
             echo "Package $pkg_value must be compiled from source: $pkg_value"
             echo "Please follow the instructions at the URL above"
+            return 2
+            ;;
+        github)
+            # Install from GitHub releases (binary)
+            local repo="$pkg_value"
+            local cmd_name="${repo##*/}"
+            echo "Installing $cmd_name from GitHub releases: $repo"
+            # This is handled by distro-specific installers with proper download logic
             return 2
             ;;
         flatpak)

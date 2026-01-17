@@ -41,10 +41,13 @@ esac
 #####################################################################################
 echo -e "${STY_CYAN}[$0]: Enabling COPR repositories...${STY_RST}"
 
-# Quickshell (CRITICAL) - from errornointernet COPR
+# Quickshell (CRITICAL) - PRECOMPILED from errornointernet COPR (no compilation needed!)
 if ! dnf copr list --enabled 2>/dev/null | grep -q "errornointernet/quickshell"; then
-  echo -e "${STY_BLUE}[$0]: Enabling Quickshell COPR...${STY_RST}"
-  v sudo dnf copr enable -y errornointernet/quickshell
+  echo -e "${STY_BLUE}[$0]: Enabling Quickshell COPR (precompiled packages)...${STY_RST}"
+  v sudo dnf copr enable -y errornointernet/quickshell || {
+    echo -e "${STY_RED}[$0]: Failed to enable Quickshell COPR. You may need to install manually.${STY_RST}"
+    echo -e "${STY_YELLOW}See: https://copr.fedorainfracloud.org/coprs/errornointernet/quickshell/${STY_RST}"
+  }
 fi
 
 # Niri compositor

@@ -404,45 +404,62 @@ if ! command -v uv &>/dev/null; then
 fi
 
 #####################################################################################
-# Install Niri (must compile - no prebuilt binaries)
+# Install Niri (PPA for Ubuntu 25.10+, compile for others)
 #####################################################################################
 echo -e "${STY_CYAN}[$0]: Installing Niri compositor...${STY_RST}"
 
 if ! command -v niri &>/dev/null; then
-  echo -e "${STY_YELLOW}[$0]: Niri must be compiled from source on Debian/Ubuntu.${STY_RST}"
+  # Check for Ubuntu 25.10+ which has PPA available
+  if $IS_UBUNTU && [[ "${UBUNTU_VERSION%%.*}" -ge 25 ]]; then
+    echo -e "${STY_GREEN}[$0]: Ubuntu 25.10+ detected - using PPA (no compilation!)${STY_RST}"
+    if ! grep -q "avengemedia/danklinux" /etc/apt/sources.list.d/* 2>/dev/null; then
+      sudo add-apt-repository -y ppa:avengemedia/danklinux || {
+        echo -e "${STY_YELLOW}[$0]: PPA failed, falling back to source compilation${STY_RST}"
+      }
+      sudo apt update
+    fi
+    if sudo apt install -y niri 2>/dev/null; then
+      echo -e "${STY_GREEN}[$0]: Niri installed from PPA!${STY_RST}"
+    fi
+  fi
   
-  # Install Niri build dependencies
-  echo -e "${STY_BLUE}[$0]: Installing Niri build dependencies...${STY_RST}"
-  v sudo apt install $installflags \
-    libgbm-dev \
-    libseat-dev \
-    libinput-dev \
-    libudev-dev \
-    libxkbcommon-dev \
-    libpango1.0-dev \
-    libdbus-1-dev \
-    libsystemd-dev \
-    libpipewire-0.3-dev \
-    clang
+  # If still not installed, compile from source
+  if ! command -v niri &>/dev/null; then
+    echo -e "${STY_YELLOW}[$0]: Niri must be compiled from source.${STY_RST}"
   
-  NIRI_BUILD_DIR="/tmp/niri-build-$$"
-  
-  echo -e "${STY_BLUE}[$0]: Cloning Niri...${STY_RST}"
-  git clone https://github.com/YaLTeR/niri.git "$NIRI_BUILD_DIR"
-  
-  echo -e "${STY_BLUE}[$0]: Building Niri (this may take a while)...${STY_RST}"
-  cd "$NIRI_BUILD_DIR"
-  cargo build --release
-  
-  echo -e "${STY_BLUE}[$0]: Installing Niri...${STY_RST}"
-  sudo cp target/release/niri /usr/local/bin/
-  sudo cp resources/niri.desktop /usr/share/wayland-sessions/ 2>/dev/null || true
-  sudo cp resources/niri-portals.conf /usr/share/xdg-desktop-portal/ 2>/dev/null || true
-  
-  cd "${REPO_ROOT}"
-  rm -rf "$NIRI_BUILD_DIR"
-  
-  echo -e "${STY_GREEN}[$0]: Niri installed successfully!${STY_RST}"
+    # Install Niri build dependencies
+    echo -e "${STY_BLUE}[$0]: Installing Niri build dependencies...${STY_RST}"
+    v sudo apt install $installflags \
+      libgbm-dev \
+      libseat-dev \
+      libinput-dev \
+      libudev-dev \
+      libxkbcommon-dev \
+      libpango1.0-dev \
+      libdbus-1-dev \
+      libsystemd-dev \
+      libpipewire-0.3-dev \
+      clang
+    
+    NIRI_BUILD_DIR="/tmp/niri-build-$$"
+    
+    echo -e "${STY_BLUE}[$0]: Cloning Niri...${STY_RST}"
+    git clone https://github.com/YaLTeR/niri.git "$NIRI_BUILD_DIR"
+    
+    echo -e "${STY_BLUE}[$0]: Building Niri (this may take a while)...${STY_RST}"
+    cd "$NIRI_BUILD_DIR"
+    cargo build --release
+    
+    echo -e "${STY_BLUE}[$0]: Installing Niri...${STY_RST}"
+    sudo cp target/release/niri /usr/local/bin/
+    sudo cp resources/niri.desktop /usr/share/wayland-sessions/ 2>/dev/null || true
+    sudo cp resources/niri-portals.conf /usr/share/xdg-desktop-portal/ 2>/dev/null || true
+    
+    cd "${REPO_ROOT}"
+    rm -rf "$NIRI_BUILD_DIR"
+    
+    echo -e "${STY_GREEN}[$0]: Niri installed successfully!${STY_RST}"
+  fi
 else
   echo -e "${STY_GREEN}[$0]: Niri already installed.${STY_RST}"
 fi
