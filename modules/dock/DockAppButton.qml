@@ -239,10 +239,14 @@ DockButton {
                     id: dockIcon
                     property string iconName: {
                         const appId = appToplevel.originalAppId ?? appToplevel.appId;
+                        let icon = "";
                         if (appId === "Spotify" || appId === "spotify" || appId === "spotify-launcher") {
-                            return "spotify";
+                            icon = "spotify";
+                        } else {
+                            icon = root.desktopEntry?.icon || AppSearch.guessIcon(appId);
                         }
-                        return root.desktopEntry?.icon || AppSearch.guessIcon(appId);
+                        // Use smart resolution to fix absolute paths that don't exist (e.g. Electron apps)
+                        return IconThemeService.smartIconName(icon, appId);
                     }
                     // Don't generate candidates if iconName is already an absolute path
                     property bool isAbsolutePath: iconName.startsWith("/") || iconName.startsWith("file://")
@@ -258,13 +262,28 @@ DockButton {
                     implicitSize: root.iconSize
                     
                     onStatusChanged: {
-                        if (status === Image.Error && candidates.length > 0) {
-                            candidateIndex++
-                            if (candidateIndex < candidates.length) {
-                                source = candidates[candidateIndex]
-                            } else {
-                                // All candidates failed, use system icon
-                                source = Quickshell.iconPath(iconName, "image-missing")
+                        if (status === Image.Error) {
+                            // Fix for absolute paths failing (e.g. Electron apps pointing to non-existent files)
+                            if (isAbsolutePath) {
+                                const path = iconName.startsWith("file://") ? iconName.substring(7) : iconName;
+                                const fileName = path.split("/").pop();
+                                let baseName = fileName;
+                                if (baseName.includes(".")) {
+                                    baseName = baseName.split(".").slice(0, -1).join(".");
+                                }
+                                // Try loading system icon with base name
+                                source = Quickshell.iconPath(baseName, "image-missing");
+                                return;
+                            }
+
+                            if (candidates.length > 0) {
+                                candidateIndex++;
+                                if (candidateIndex < candidates.length) {
+                                    source = candidates[candidateIndex];
+                                } else {
+                                    // All candidates failed, use system icon
+                                    source = Quickshell.iconPath(iconName, "image-missing");
+                                }
                             }
                         }
                     }

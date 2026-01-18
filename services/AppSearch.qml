@@ -17,6 +17,7 @@ Singleton {
         "code-url-handler": "visual-studio-code",
         "Code": "visual-studio-code",
         "code": "visual-studio-code",
+        "windsurf": "visual-studio-code",
         "gnome-tweaks": "org.gnome.tweaks",
         "pavucontrol-qt": "pavucontrol",
         "wps": "wps-office2019-kprometheus",

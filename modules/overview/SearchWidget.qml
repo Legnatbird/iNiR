@@ -3,7 +3,6 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
-import Qt.labs.synchronizer
 import Qt5Compat.GraphicalEffects
 import QtQuick
 import QtQuick.Controls
@@ -449,9 +448,8 @@ Item { // Wrapper
                 Layout.rightMargin: 4
                 Layout.topMargin: verticalPadding
                 Layout.bottomMargin: verticalPadding
-                Synchronizer on searchingText {
-                    property alias source: root.searchingText
-                }
+                searchingText: root.searchingText
+                onSearchingTextChanged: if (searchingText !== root.searchingText) root.searchingText = searchingText
             }
 
             Rectangle {

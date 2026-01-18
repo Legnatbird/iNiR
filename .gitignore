@@ -16,6 +16,7 @@ CLAUDE.md
 **/CLAUDE.md
 prompts/
 .continue/
+context-architect/
 
 # WIP documentation (not for distribution)
 docs/*_IMPLEMENTATION.md

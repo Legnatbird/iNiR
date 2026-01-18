@@ -16,6 +16,28 @@ Singleton {
     property bool _initialized: false
     property bool _restartQueued: false
 
+    // Smart icon resolution: handles broken absolute paths from Electron apps
+    function smartIconName(icon, appId) {
+        if (!icon) return appId || "application-x-executable";
+        
+        // Block known bad paths to avoid Qt warnings
+        // Electron apps running from Downloads/tmp often report invalid absolute paths
+        if (icon.startsWith("/") || icon.startsWith("file://")) {
+            // Check for volatile paths
+            if (icon.indexOf("/Descargas/") !== -1 || icon.indexOf("/Downloads/") !== -1 || icon.indexOf("/tmp/") !== -1) {
+                const path = icon.startsWith("file://") ? icon.substring(7) : icon;
+                const fileName = path.split("/").pop();
+                let baseName = fileName;
+                if (baseName.includes(".")) {
+                    baseName = baseName.split(".").slice(0, -1).join(".");
+                }
+                return baseName; // Return "code" instead of full path
+            }
+        }
+        
+        return icon;
+    }
+
     // Get icon path from dock theme, fallback to system
     function dockIconPath(iconName: string, fallback: string): string {
         if (!iconName) return Quickshell.iconPath(fallback || "application-x-executable")

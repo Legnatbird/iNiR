@@ -3,7 +3,6 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
-import Qt.labs.synchronizer
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -232,9 +231,8 @@ Scope {
                 SearchWidget {
                     id: searchWidget
                     anchors.horizontalCenter: parent.horizontalCenter
-                    Synchronizer on searchingText {
-                        property alias source: root.searchingText
-                    }
+                    searchingText: root.searchingText
+                    onSearchingTextChanged: if (searchingText !== root.searchingText) root.searchingText = searchingText
                 }
 
                 Loader {

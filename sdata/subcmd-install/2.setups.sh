@@ -40,17 +40,29 @@ function setup_systemd_services(){
   v bash -c "echo i2c-dev | sudo tee /etc/modules-load.d/i2c-dev.conf"
   
   # ydotool service - create user service symlink if needed
-  if [[ -f /usr/lib/systemd/system/ydotool.service ]]; then
-    if [[ ! -e /usr/lib/systemd/user/ydotool.service ]]; then
-      x sudo ln -sf /usr/lib/systemd/system/ydotool.service /usr/lib/systemd/user/ydotool.service
+  # Check multiple possible locations (varies by distro)
+  local ydotool_system_service=""
+  for path in /usr/lib/systemd/system/ydotool.service /lib/systemd/system/ydotool.service; do
+    if [[ -f "$path" ]]; then
+      ydotool_system_service="$path"
+      break
     fi
+  done
+  
+  if [[ -n "$ydotool_system_service" ]]; then
+    if [[ ! -e /usr/lib/systemd/user/ydotool.service ]]; then
+      x sudo mkdir -p /usr/lib/systemd/user
+      x sudo ln -sf "$ydotool_system_service" /usr/lib/systemd/user/ydotool.service
+    fi
+  else
+    log_warning "ydotool.service not found - ydotool may need manual configuration"
   fi
   
-  # Enable ydotool
-  if [[ ! -z "${DBUS_SESSION_BUS_ADDRESS}" ]]; then
+  # Enable ydotool only if service exists
+  if [[ -n "$ydotool_system_service" ]] && [[ ! -z "${DBUS_SESSION_BUS_ADDRESS}" ]]; then
     v systemctl --user daemon-reload
-    v systemctl --user enable ydotool --now
-  else
+    v systemctl --user enable ydotool --now 2>/dev/null || log_warning "Could not enable ydotool service"
+  elif [[ -n "$ydotool_system_service" ]]; then
     log_warning "Not in a graphical session. Run this after login:"
     echo "  systemctl --user enable ydotool --now"
   fi
