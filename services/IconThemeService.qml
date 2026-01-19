@@ -23,9 +23,17 @@ Singleton {
         // Block known bad paths to avoid Qt warnings
         // Electron apps running from Downloads/tmp often report invalid absolute paths
         if (icon.startsWith("/") || icon.startsWith("file://")) {
+            const path = icon.startsWith("file://") ? icon.substring(7) : icon;
+
+            // Try to fix common broken Electron paths
+            // Example: .../resources/app/resources/linux/code.png -> .../resources/linux/code.png
+            if (path.indexOf("/resources/app/resources/") !== -1) {
+                // Return the potential fixed path. If it works, great. If not, it will fallback in DockAppButton
+                return path.replace("/resources/app/resources/", "/resources/");
+            }
+
             // Check for volatile paths
             if (icon.indexOf("/Descargas/") !== -1 || icon.indexOf("/Downloads/") !== -1 || icon.indexOf("/tmp/") !== -1) {
-                const path = icon.startsWith("file://") ? icon.substring(7) : icon;
                 const fileName = path.split("/").pop();
                 let baseName = fileName;
                 if (baseName.includes(".")) {
