@@ -16,8 +16,8 @@ Scope {
     id: root
     property bool visible: false
     readonly property MprisPlayer activePlayer: MprisController.activePlayer
-    // Convert list to JS array for Repeater compatibility
-    readonly property var meaningfulPlayers: Array.from(MprisController.players)
+    // Use Mpris.players directly - filtering done in delegate visibility
+    readonly property var allPlayers: Mpris.players.values
     readonly property real osdWidth: Appearance.sizes.osdWidth
     readonly property real widgetWidth: Appearance.sizes.mediaControlsWidth
     readonly property real widgetHeight: Appearance.sizes.mediaControlsHeight
@@ -151,14 +151,16 @@ Scope {
                     spacing: 8
 
                     Repeater {
-                        model: root.meaningfulPlayers
+                        model: root.allPlayers
                         delegate: PlayerControl {
                             required property MprisPlayer modelData
                             required property int index
+                            // Filter in delegate to avoid rebuild flicker
+                            visible: MprisController.isRealPlayer(modelData)
                             player: modelData
                             visualizerPoints: root.visualizerPoints
                             implicitWidth: root.widgetWidth
-                            implicitHeight: root.widgetHeight
+                            implicitHeight: visible ? root.widgetHeight : 0
                             radius: root.popupRounding
                             // Screen position for aurora glass
                             screenX: cardArea.x + (mediaControlsRoot.width - cardArea.width) / 2
@@ -168,7 +170,7 @@ Scope {
 
                     Item { // No player placeholder
                         Layout.fillWidth: true
-                        visible: root.meaningfulPlayers.length === 0
+                        visible: MprisController.players.length === 0
                         implicitWidth: placeholderBackground.implicitWidth + Appearance.sizes.elevationMargin
                         implicitHeight: placeholderBackground.implicitHeight + Appearance.sizes.elevationMargin
 

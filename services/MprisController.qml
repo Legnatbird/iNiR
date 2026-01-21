@@ -75,6 +75,10 @@ Singleton {
 		if (name.includes('plasma-browser-integration')) return false;
 		// Filter duplicate MPD instances
 		if (name.endsWith('.mpd') && !name.endsWith('MediaPlayer2.mpd')) return false;
+		// Filter media without title (likely GIFs or short videos)
+		if (!player.trackTitle || player.trackTitle.length === 0) return false;
+		// Filter very short media (< 5 seconds) - likely GIFs
+		if (player.length > 0 && player.length < 5) return false;
 		return true;
 	}
 	
