@@ -76,7 +76,12 @@ Singleton {
 		// Filter duplicate MPD instances
 		if (name.endsWith('.mpd') && !name.endsWith('MediaPlayer2.mpd')) return false;
 		// Filter media without title (likely GIFs or short videos)
-		if (!player.trackTitle || player.trackTitle.length === 0) return false;
+		// But keep players that are actively playing (track may be changing)
+		const isPlaying = player.playbackState === MprisPlaybackState.Playing;
+		if (!player.trackTitle || player.trackTitle.length === 0) {
+			// Keep if playing (track transition) or if it's a known media player
+			if (!isPlaying) return false;
+		}
 		// Filter very short media (< 5 seconds) - likely GIFs
 		if (player.length > 0 && player.length < 5) return false;
 		return true;
