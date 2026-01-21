@@ -716,7 +716,7 @@ Singleton {
                 property int scrollWorkspaceSteps: 2
                 property bool keepOverviewOpenOnWindowClick: true
                 property bool closeAfterWindowMove: true
-                property bool showPreviews: true // Show window thumbnails in overview
+                property bool showPreviews: false // Show window thumbnails in overview
             }
 
             // Settings for the custom Alt-Tab switcher in ii
@@ -881,12 +881,12 @@ Singleton {
                     property bool media: true
                     property bool week: true
                     property bool context: true
-                    property bool note: true
-                    property bool launch: true
+                    property bool note: false
+                    property bool launch: false
                     property bool controls: true
                     property bool status: true
                     property bool crypto: false
-                    property bool wallpaper: false
+                    property bool wallpaper: true
                     // ContextCard specific
                     property bool contextShowWeather: true
                     // Widget order (drag to reorder)
