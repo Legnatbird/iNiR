@@ -149,12 +149,12 @@ Fonts, theming, and utilities.
 | `glib2` | GLib utilities |
 | `translate-shell` | Translation CLI |
 | `kvantum` | Qt theming |
+| `matugen` | Material You colors | Yes |
 
 ### From AUR
 
 | Package | Purpose | Required |
 |---------|---------|----------|
-| `matugen-bin` | Material You colors | Yes |
 | `ttf-jetbrains-mono-nerd` | JetBrains Mono Nerd | Yes (monospace) |
 | `ttf-material-symbols-variable-git` | Material icons | Yes (UI icons) |
 | `ttf-readex-pro` | Readex Pro font | No (has fallback) |

@@ -28,7 +28,7 @@ depends=(
 )
 
 # AUR dependencies (installed separately)
-# matugen-bin
+# matugen (now in official repos)
 # otf-space-grotesk
 # ttf-jetbrains-mono-nerd
 # ttf-material-symbols-variable-git

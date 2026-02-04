@@ -139,6 +139,9 @@ OFFICIAL_PACKAGES=(
   cliphist
   gum
   xwayland-satellite
+  
+  # Theming
+  matugen
 )
 
 installflags="--needed"
@@ -207,7 +210,6 @@ install_font_fallback() {
 # Add other AUR packages based on flags
 if $INSTALL_FONTS; then
   AUR_PACKAGES+=(
-    matugen-bin           # Binary package - no compilation
     adw-gtk-theme         # Official repo version if available, else AUR
     capitaine-cursors
     whitesur-icon-theme   # Try non-git version first
