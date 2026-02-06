@@ -132,5 +132,151 @@ Item {
                 }
             }
         }
+
+        // Customization controls - only visible when timer is not running
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: 16
+            spacing: 6
+            visible: !TimerService.pomodoroRunning
+            opacity: visible ? 1 : 0
+            Behavior on opacity {
+                enabled: Appearance.animationsEnabled
+                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+            }
+
+            // Focus time row
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 12
+                Layout.rightMargin: 12
+                spacing: 6
+
+                RippleButton {
+                    implicitWidth: 28; implicitHeight: 28
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colRipple: Appearance.colors.colLayer2Active
+                    enabled: TimerService.focusTime > 300
+                    onClicked: Config.setNestedValue("time.pomodoro.focus", TimerService.focusTime - 300)
+                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: "remove"; iconSize: 16; color: Appearance.colors.colOnLayer2 }
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    text: Translation.tr("Focus: %1 min").arg(TimerService.focusTime / 60)
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colSubtext
+                }
+                RippleButton {
+                    implicitWidth: 28; implicitHeight: 28
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colRipple: Appearance.colors.colLayer2Active
+                    enabled: TimerService.focusTime < 7200
+                    onClicked: Config.setNestedValue("time.pomodoro.focus", TimerService.focusTime + 300)
+                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: "add"; iconSize: 16; color: Appearance.colors.colOnLayer2 }
+                }
+            }
+
+            // Break time row
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 12
+                Layout.rightMargin: 12
+                spacing: 6
+
+                RippleButton {
+                    implicitWidth: 28; implicitHeight: 28
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colRipple: Appearance.colors.colLayer2Active
+                    enabled: TimerService.breakTime > 60
+                    onClicked: Config.setNestedValue("time.pomodoro.breakTime", TimerService.breakTime - 60)
+                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: "remove"; iconSize: 16; color: Appearance.colors.colOnLayer2 }
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    text: Translation.tr("Break: %1 min").arg(TimerService.breakTime / 60)
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colSubtext
+                }
+                RippleButton {
+                    implicitWidth: 28; implicitHeight: 28
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colRipple: Appearance.colors.colLayer2Active
+                    enabled: TimerService.breakTime < 1800
+                    onClicked: Config.setNestedValue("time.pomodoro.breakTime", TimerService.breakTime + 60)
+                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: "add"; iconSize: 16; color: Appearance.colors.colOnLayer2 }
+                }
+            }
+
+            // Long break time row
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 12
+                Layout.rightMargin: 12
+                spacing: 6
+
+                RippleButton {
+                    implicitWidth: 28; implicitHeight: 28
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colRipple: Appearance.colors.colLayer2Active
+                    enabled: TimerService.longBreakTime > 300
+                    onClicked: Config.setNestedValue("time.pomodoro.longBreak", TimerService.longBreakTime - 300)
+                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: "remove"; iconSize: 16; color: Appearance.colors.colOnLayer2 }
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    text: Translation.tr("Long break: %1 min").arg(TimerService.longBreakTime / 60)
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colSubtext
+                }
+                RippleButton {
+                    implicitWidth: 28; implicitHeight: 28
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colRipple: Appearance.colors.colLayer2Active
+                    enabled: TimerService.longBreakTime < 3600
+                    onClicked: Config.setNestedValue("time.pomodoro.longBreak", TimerService.longBreakTime + 300)
+                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: "add"; iconSize: 16; color: Appearance.colors.colOnLayer2 }
+                }
+            }
+
+            // Sound toggle
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 12
+                Layout.rightMargin: 12
+                Layout.topMargin: 4
+                spacing: 6
+
+                MaterialSymbol {
+                    text: (Config.options?.sounds?.pomodoro ?? false) ? "volume_up" : "volume_off"
+                    iconSize: 16
+                    color: Appearance.colors.colSubtext
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Sound notification")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colSubtext
+                }
+                Switch {
+                    checked: Config.options?.sounds?.pomodoro ?? false
+                    onCheckedChanged: Config.setNestedValue("sounds.pomodoro", checked)
+                }
+            }
+        }
     }
 }

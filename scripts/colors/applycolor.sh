@@ -54,15 +54,16 @@ apply_term() {
 
 apply_terminal_configs() {
   # Generate terminal-specific config files (Kitty, Alacritty, Foot, WezTerm, Ghostty, Konsole)
+  local log_file="$STATE_DIR/user/generated/terminal_colors.log"
+  
   if [ ! -f "$STATE_DIR/user/generated/material_colors.scss" ]; then
-    echo "material_colors.scss not found. Skipping terminal config generation."
+    echo "[terminal-colors] material_colors.scss not found. Skipping." | tee -a "$log_file" 2>/dev/null
     return
   fi
 
-  # Get enabled terminals from config
+  # Get enabled terminals from config, but only if actually installed
   local enabled_terminals=()
   if [ -f "$CONFIG_FILE" ]; then
-    # Check which terminal config generators are enabled
     local enable_kitty=$(jq -r '.appearance.wallpaperTheming.terminals.kitty // true' "$CONFIG_FILE")
     local enable_alacritty=$(jq -r '.appearance.wallpaperTheming.terminals.alacritty // true' "$CONFIG_FILE")
     local enable_foot=$(jq -r '.appearance.wallpaperTheming.terminals.foot // true' "$CONFIG_FILE")
@@ -70,23 +71,26 @@ apply_terminal_configs() {
     local enable_ghostty=$(jq -r '.appearance.wallpaperTheming.terminals.ghostty // true' "$CONFIG_FILE")
     local enable_konsole=$(jq -r '.appearance.wallpaperTheming.terminals.konsole // true' "$CONFIG_FILE")
 
-    [[ "$enable_kitty" == "true" ]] && enabled_terminals+=(kitty)
-    [[ "$enable_alacritty" == "true" ]] && enabled_terminals+=(alacritty)
-    [[ "$enable_foot" == "true" ]] && enabled_terminals+=(foot)
-    [[ "$enable_wezterm" == "true" ]] && enabled_terminals+=(wezterm)
-    [[ "$enable_ghostty" == "true" ]] && enabled_terminals+=(ghostty)
-    [[ "$enable_konsole" == "true" ]] && enabled_terminals+=(konsole)
+    # Only add terminals that are both enabled AND installed
+    [[ "$enable_kitty" == "true" ]] && command -v kitty &>/dev/null && enabled_terminals+=(kitty)
+    [[ "$enable_alacritty" == "true" ]] && command -v alacritty &>/dev/null && enabled_terminals+=(alacritty)
+    [[ "$enable_foot" == "true" ]] && command -v foot &>/dev/null && enabled_terminals+=(foot)
+    [[ "$enable_wezterm" == "true" ]] && command -v wezterm &>/dev/null && enabled_terminals+=(wezterm)
+    [[ "$enable_ghostty" == "true" ]] && command -v ghostty &>/dev/null && enabled_terminals+=(ghostty)
+    [[ "$enable_konsole" == "true" ]] && command -v konsole &>/dev/null && enabled_terminals+=(konsole)
   else
-    # Default: enable all
-    enabled_terminals=(kitty alacritty foot wezterm ghostty konsole)
+    # Default: only generate for installed terminals
+    for term in kitty alacritty foot wezterm ghostty konsole; do
+      command -v "$term" &>/dev/null && enabled_terminals+=("$term")
+    done
   fi
 
   if [ ${#enabled_terminals[@]} -eq 0 ]; then
+    echo "[terminal-colors] No enabled terminals found installed. Skipping." >> "$log_file" 2>/dev/null
     return
   fi
 
   # Run the Python script to generate configs
-  # Use venv python if available, otherwise system python
   local python_cmd="python3"
   local venv_python="${ILLOGICAL_IMPULSE_VIRTUAL_ENV:-$HOME/.local/state/quickshell/.venv}/bin/python"
   if [[ -x "$venv_python" ]]; then
@@ -94,9 +98,12 @@ apply_terminal_configs() {
   fi
 
   if command -v "$python_cmd" &>/dev/null || [[ -x "$python_cmd" ]]; then
+    echo "[terminal-colors] Generating configs for: ${enabled_terminals[*]}" >> "$log_file" 2>/dev/null
     "$python_cmd" "$SCRIPT_DIR/generate_terminal_configs.py" \
       --scss "$STATE_DIR/user/generated/material_colors.scss" \
-      --terminals "${enabled_terminals[@]}" &>/dev/null &
+      --terminals "${enabled_terminals[@]}" >> "$log_file" 2>&1 &
+  else
+    echo "[terminal-colors] ERROR: Python not found ($python_cmd). Cannot generate terminal configs." >> "$log_file" 2>/dev/null
   fi
 }
 
