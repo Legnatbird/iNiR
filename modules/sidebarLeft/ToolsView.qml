@@ -176,7 +176,7 @@ Item {
                     ActionTile {
                         tileIcon: "terminal"
                         label: Translation.tr("Terminal")
-                        onClicked: Quickshell.execDetached([Config.options?.apps?.terminal ?? "/usr/bin/kitty"])
+                        onClicked: Quickshell.execDetached([Quickshell.shellPath("scripts/launch-terminal.sh")])
                     }
                     ActionTile {
                         tileIcon: "folder"
