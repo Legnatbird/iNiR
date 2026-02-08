@@ -88,11 +88,11 @@ Singleton {
 
     // Estado de silencio / "No molestar" - synced with config
     property bool silent: false
-    
+
     function toggleSilent(): void {
         silent = !silent
     }
-    
+
     Connections {
         target: Config
         function onOptionsChanged() {
@@ -102,7 +102,7 @@ Singleton {
             }
         }
     }
-    
+
     onSilentChanged: {
         if (Config.ready) {
             const configSilent = Config.options?.notifications?.silent ?? false
@@ -111,13 +111,13 @@ Singleton {
             }
         }
     }
-    
+
     // Unread count: computed from popupList (new) or manual counter (legacy)
     property int _manualUnreadCounter: 0
-    readonly property int unread: (Config.options?.notifications?.useLegacyCounter ?? false) 
-                                    ? _manualUnreadCounter 
+    readonly property int unread: (Config.options?.notifications?.useLegacyCounter ?? false)
+                                    ? _manualUnreadCounter
                                     : popupList.length
-    
+
     property var filePath: Directories.notificationsPath
     property list<Notif> list: []
     // Cached lists - updated via debounce timer
@@ -127,10 +127,10 @@ Singleton {
     property var _cachedAppNameList: []
     property var _cachedPopupAppNameList: []
     property bool _groupsDirty: true
-    
+
     property bool popupInhibited: (GlobalStates?.sidebarRightOpen ?? false) || (GlobalStates?.waffleNotificationCenterOpen ?? false) || silent
     property var latestTimeForApp: ({})
-    
+
     // Debounce timer for group updates - 100ms is sufficient for responsive UI
     Timer {
         id: groupUpdateTimer
@@ -149,19 +149,19 @@ Singleton {
     function stringifyList(list) {
         return JSON.stringify(list.map((notif) => notifToJSON(notif)), null, 2);
     }
-    
+
     onListChanged: {
         root._groupsDirty = true
         groupUpdateTimer.restart()
     }
-    
+
     function _updateGroups() {
         if (!_groupsDirty) return
         _groupsDirty = false
-        
+
         // Update popupList
         root.popupList = root.list.filter((notif) => notif.popup)
-        
+
         // Update latest time for each app
         const newLatestTime = {}
         root.list.forEach((notif) => {
@@ -170,14 +170,14 @@ Singleton {
             }
         })
         root.latestTimeForApp = newLatestTime
-        
+
         // Update groups
         root._cachedGroupsByAppName = _groupsForListOptimized(root.list)
         root._cachedPopupGroupsByAppName = _groupsForListOptimized(root.popupList)
         root._cachedAppNameList = _appNameListForGroups(root._cachedGroupsByAppName)
         root._cachedPopupAppNameList = _appNameListForGroups(root._cachedPopupGroupsByAppName)
     }
-    
+
     function _groupsForListOptimized(list) {
         const groups = {}
         for (let i = 0; i < list.length; i++) {
@@ -201,7 +201,7 @@ Singleton {
         }
         return groups
     }
-    
+
     function _appNameListForGroups(groups) {
         return Object.keys(groups).sort((a, b) => groups[b].time - groups[a].time)
     }
@@ -246,7 +246,7 @@ Singleton {
 
     function _timeoutForNotification(notification) {
         const ignoreApp = Config.options?.notifications?.ignoreAppTimeout ?? false;
-        
+
         // 1) La app define un timeout explícito (> 0): respetarlo solo si no ignoramos
         if (!ignoreApp && notification.expireTimeout > 0) {
             return notification.expireTimeout;
@@ -288,12 +288,12 @@ Singleton {
 
         onNotification: (notification) => {
             // Filter out niri screenshot notifications (TaskView preview captures)
-            if (notification.appName === "niri" && 
-                (notification.summary?.toLowerCase().includes("screenshot") || 
+            if (notification.appName === "niri" &&
+                (notification.summary?.toLowerCase().includes("screenshot") ||
                  notification.body?.toLowerCase().includes("screenshot"))) {
                 return;
             }
-            
+
             if (!_ingressAllowed(notification)) {
                 return;
             }
@@ -326,7 +326,7 @@ Singleton {
                         "interval": timeout,
                     });
                 }
-                
+
                 // Legacy mode: increment manual counter
                 if (Config.options?.notifications?.useLegacyCounter ?? false) {
                     root._manualUnreadCounter++;

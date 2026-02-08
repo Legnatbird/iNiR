@@ -11,7 +11,7 @@ Singleton {
     property bool ready: false
     property int readWriteDelay: 50 // milliseconds
     property bool blockWrites: false
-    
+
     signal configChanged()
 
     function flushWrites(): void {
@@ -103,17 +103,17 @@ Singleton {
 
         JsonAdapter {
             id: configOptionsJsonAdapter
-            
+
             // Panel system
             property list<string> enabledPanels: [
-                "iiBar", "iiBackground", "iiCheatsheet", "iiControlPanel", "iiDock", "iiLock", "iiMediaControls", 
-                "iiNotificationPopup", "iiOnScreenDisplay", "iiOnScreenKeyboard", "iiOverlay", 
-                "iiOverview", "iiPolkit", "iiRegionSelector", "iiScreenCorners", "iiSessionScreen", 
+                "iiBar", "iiBackground", "iiCheatsheet", "iiControlPanel", "iiDock", "iiLock", "iiMediaControls",
+                "iiNotificationPopup", "iiOnScreenDisplay", "iiOnScreenKeyboard", "iiOverlay",
+                "iiOverview", "iiPolkit", "iiRegionSelector", "iiScreenCorners", "iiSessionScreen",
                 "iiSidebarLeft", "iiSidebarRight", "iiVerticalBar", "iiWallpaperSelector", "iiAltSwitcher", "iiClipboard"
             ]
             property string panelFamily: "ii" // "ii" or "waffle"
             property bool familyTransitionAnimation: true // Show animated overlay when switching families
-            
+
             property JsonObject policies: JsonObject {
                 property int ai: 1 // 0: No | 1: Yes | 2: Local
                 property int weeb: 1 // 0: No | 1: Open | 2: Closet
@@ -666,10 +666,14 @@ Singleton {
                 property int timeoutLow: 5000
                 property int timeoutNormal: 7000
                 property int timeoutCritical: 0
+                // Always use user timeout settings instead of app-defined ones
+                property bool ignoreAppTimeout: false
                 // Posición del popup de notificaciones: topRight, bottomRight, topLeft, bottomLeft
                 property string position: "topRight"
                 // Margen respecto a los bordes de pantalla (px)
                 property int edgeMargin: 4
+                // Slightly enlarge notifications when the mouse hovers over them
+                property bool scaleOnHover: false
                 // Do Not Disturb mode
                 property bool silent: false
                 // Use legacy manual counter (false = auto-sync with popup list, true = manual counter)
@@ -1015,7 +1019,7 @@ Singleton {
                 }
                 property bool secondPrecision: false
             }
-            
+
             property JsonObject wallpaperSelector: JsonObject {
                 property bool useSystemFileDialog: false
                 property string selectionTarget: "main"
@@ -1024,7 +1028,7 @@ Singleton {
             property JsonObject screenRecord: JsonObject {
                 property string savePath: "" // Empty = use XDG Videos or ~/Videos
             }
-            
+
             property JsonObject windows: JsonObject {
                 property bool showTitlebar: true // Client-side decoration for shell apps
                 property bool centerTitle: true
